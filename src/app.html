@@ -1,0 +1,1566 @@
+<title>Declaratie-app</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: één kolom in iOS-stijl met grote titel, bonnen als kassastrookjes, scanknop vast onderaan in het midden */
+:root {
+  --bg: #F1F3F6;
+  --surface: #FFFFFF;
+  --surface-2: #F6F7FA;
+  --ink: #12151C;
+  --muted: #5E6574;
+  --line: #E1E4EA;
+  --accent: #2346D6;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E8EDFD;
+  --ok: #0F7F57;
+  --ok-soft: #E2F3EB;
+  --warn: #9A5B00;
+  --warn-soft: #FCF0DC;
+  --danger: #C2312A;
+  --danger-soft: #FBE8E6;
+  --ai: #6646D2;
+  --ai-soft: #F0ECFD;
+  --scrim: rgba(12, 15, 24, .45);
+  --shadow: 0 1px 2px rgba(18, 24, 44, .06), 0 10px 28px rgba(18, 24, 44, .10);
+  --f-display: "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --f-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D0F14; --surface: #171A21; --surface-2: #1F232C; --ink: #EDEFF4; --muted: #9AA1AF; --line: #2A2F3A;
+    --accent: #8299FF; --accent-ink: #0A0F2E; --accent-soft: #1D2647;
+    --ok: #4BC893; --ok-soft: #12302A; --warn: #F2B65C; --warn-soft: #33270F;
+    --danger: #FF7B71; --danger-soft: #3A1B19; --ai: #B6A4FF; --ai-soft: #251F42;
+    --scrim: rgba(0, 0, 0, .6); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D0F14; --surface: #171A21; --surface-2: #1F232C; --ink: #EDEFF4; --muted: #9AA1AF; --line: #2A2F3A;
+  --accent: #8299FF; --accent-ink: #0A0F2E; --accent-soft: #1D2647;
+  --ok: #4BC893; --ok-soft: #12302A; --warn: #F2B65C; --warn-soft: #33270F;
+  --danger: #FF7B71; --danger-soft: #3A1B19; --ai: #B6A4FF; --ai-soft: #251F42;
+  --scrim: rgba(0, 0, 0, .6); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.4;
+  padding-inline: 16px; padding-block: 0 140px;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 560px; margin: 0 auto; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Top ---------- */
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-block: 20px 14px; }
+.top h1 { font-family: var(--f-display); font-size: 34px; line-height: 1.05; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+.top .sub { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--surface); box-shadow: var(--shadow);
+  display: grid; place-items: center; flex: none;
+}
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ---------- Summary ---------- */
+.summary {
+  background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 18px;
+  display: grid; gap: 14px;
+}
+.summary .label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.summary .big { font-family: var(--f-mono); font-size: 36px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.summary .meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 14px; color: var(--muted); }
+.btn {
+  border: 0; border-radius: 12px; min-height: 48px; padding: 0 18px; font-weight: 600; font-size: 16px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn svg { width: 20px; height: 20px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-soft { background: var(--accent-soft); color: var(--accent); }
+.btn-plain { background: var(--surface-2); color: var(--ink); }
+a.btn { text-decoration: none; }
+.btn-danger { background: var(--danger-soft); color: var(--danger); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn-block { width: 100%; }
+
+/* ---------- Onboarding card ---------- */
+.setup { margin-top: 14px; background: var(--accent-soft); border-radius: 16px; padding: 16px; display: grid; gap: 10px; }
+.setup h2 { margin: 0; font-size: 17px; }
+.setup p { margin: 0; font-size: 14px; color: var(--muted); }
+
+/* ---------- Segmented ---------- */
+.seg { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 9px; min-height: 36px; font-size: 15px; font-weight: 600; color: var(--muted); }
+.seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+/* ---------- List ---------- */
+.month { margin: 22px 4px 8px; display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.list { background: var(--surface); border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow); }
+.row {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 12px 14px; border: 0; background: transparent; width: 100%; text-align: left;
+}
+.row + .row { border-top: 1px solid var(--line); }
+.row:active { background: var(--surface-2); }
+.thumb { width: 48px; height: 60px; border-radius: 8px; background: var(--surface-2) center/cover no-repeat; border: 1px solid var(--line); overflow: hidden; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.row .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .s { font-size: 14px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 3px; }
+.row .amt { font-family: var(--f-mono); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.row .amt small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.chip.code { font-family: var(--f-mono); letter-spacing: .02em; background: var(--accent-soft); color: var(--accent); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+
+.empty { text-align: center; padding: 28px 20px 20px; color: var(--muted); display: grid; gap: 10px; justify-items: center; }
+.empty .receipt {
+  width: 92px; height: 120px; background: var(--surface); border-radius: 6px 6px 0 0; box-shadow: var(--shadow); position: relative;
+  display: grid; align-content: start; gap: 8px; padding: 16px 14px;
+  -webkit-mask: radial-gradient(circle 6px at 7px 100%, transparent 98%, #000) 0 0/14px 100% repeat-x;
+          mask: radial-gradient(circle 6px at 7px 100%, transparent 98%, #000) 0 0/14px 100% repeat-x;
+}
+.empty .receipt i { display: block; height: 6px; border-radius: 3px; background: var(--line); }
+.empty .receipt i:nth-child(2) { width: 70%; } .empty .receipt i:nth-child(4) { width: 50%; background: var(--accent-soft); }
+.empty h2 { margin: 6px 0 0; color: var(--ink); font-size: 19px; }
+.empty p { margin: 0; max-width: 32ch; }
+
+/* ---------- Scan dock ---------- */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: center; gap: 10px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--bg) 55%, transparent);
+  pointer-events: none;
+}
+.dock > * { pointer-events: auto; }
+.scan {
+  min-height: 60px; padding: 0 26px 0 22px; border-radius: 30px; border: 0; background: var(--accent); color: var(--accent-ink);
+  font-size: 17px; font-weight: 700; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 8px 24px rgba(35, 70, 214, .35);
+}
+.scan svg { width: 26px; height: 26px; }
+.pick { width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--surface); box-shadow: var(--shadow); display: grid; place-items: center; color: var(--ink); }
+.pick svg { width: 24px; height: 24px; }
+
+/* ---------- Full screen views ---------- */
+.view {
+  position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: env(safe-area-inset-top, 0px) 16px calc(110px + env(safe-area-inset-bottom, 0px));
+}
+.bar {
+  position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  min-height: 52px; margin: 0 -16px; padding: 0 8px; background: var(--bg);
+}
+.bar h2 { margin: 0; font-size: 17px; font-weight: 600; text-align: center; }
+.bar .l { justify-self: start; } .bar .r { justify-self: end; }
+.link { border: 0; background: none; color: var(--accent); font-size: 17px; padding: 10px 8px; min-height: 44px; }
+.view .inner { max-width: 560px; margin: 0 auto; display: grid; gap: 16px; }
+
+.photo {
+  position: relative; border-radius: 16px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line);
+  height: 260px; display: grid; place-items: center; padding: 0;
+}
+.photo img { width: 100%; height: 100%; object-fit: contain; background: #0B0D12; }
+.photo .zoom { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,.55); color: #fff; border-radius: 999px; font-size: 13px; padding: 4px 10px; }
+.photo .none { color: var(--muted); font-size: 14px; }
+
+.status { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 12px; font-size: 14px; }
+.status.ai { background: var(--ai-soft); color: var(--ai); }
+.status.info { background: var(--surface); color: var(--muted); }
+.status.err { background: var(--warn-soft); color: var(--warn); }
+.status svg { width: 18px; height: 18px; flex: none; }
+.spin { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.group { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.group-title { margin: 6px 4px -8px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.field { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 8px; padding: 6px 14px; min-height: 52px; position: relative; }
+.field + .field { border-top: 1px solid var(--line); }
+.field label { font-size: 15px; color: var(--muted); }
+.field input, .field select, .field textarea {
+  width: 100%; min-width: 0; border: 0; background: transparent; font-size: 17px; padding: 8px 0; outline: none;
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--muted); opacity: .55; font-weight: 400; font-family: var(--f-body); letter-spacing: 0; }
+.field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: none; }
+.field:focus-within { background: var(--surface-2); }
+.field input.amount { font-family: var(--f-mono); font-weight: 600; font-size: 20px; }
+.field input.code { font-family: var(--f-mono); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.field input.code::placeholder { text-transform: none; }
+.field.ai::after {
+  content: "✦ gelezen"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; font-weight: 600; color: var(--ai); background: var(--ai-soft); padding: 2px 7px; border-radius: 999px; pointer-events: none;
+}
+.field.ai input { padding-right: 78px; }
+.field.bad label { color: var(--danger); }
+.field.stack { grid-template-columns: 1fr; gap: 2px; padding-block: 10px; }
+.field textarea { resize: vertical; min-height: 120px; line-height: 1.45; font-size: 16px; }
+input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40px; text-align: left; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+.chips + .chips { border-top: 1px solid var(--line); }
+.pchip {
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 8px 12px; text-align: left;
+  display: grid; gap: 2px; min-height: 44px; max-width: 100%;
+}
+.pchip b { font-family: var(--f-mono); font-size: 15px; letter-spacing: .04em; }
+.pchip span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.pchip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.pchip[aria-pressed="true"] b { color: var(--accent); }
+.cat { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: 14px; min-height: 36px; }
+.cat[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.hint { font-size: 13px; color: var(--muted); padding: 0 14px 12px; }
+.hint.top { padding-top: 12px; }
+
+.actions {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg); border-top: 1px solid var(--line);
+}
+.actions .in { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.actions .in.one { grid-template-columns: 1fr; }
+
+.danger-zone { display: grid; gap: 8px; }
+.confirm { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ---------- Sheet ---------- */
+.sheet-wrap { position: fixed; inset: 0; z-index: 40; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  width: 100%; max-width: 600px; max-height: 92%; overflow-y: auto; background: var(--bg); border-radius: 20px 20px 0 0;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px; animation: up .22s ease-out;
+}
+@keyframes up { from { transform: translateY(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+.grabber { width: 38px; height: 5px; border-radius: 3px; background: var(--line); margin: 2px auto 0; }
+.sheet h2 { margin: 0; font-family: var(--f-display); font-size: 24px; letter-spacing: -.01em; }
+.sheet .head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.items .it { display: grid; grid-template-columns: 24px 40px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; }
+.items .it + .it { border-top: 1px solid var(--line); }
+.items .it .thumb { width: 40px; height: 50px; }
+.items input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+.items .it .t { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.items .it .s { font-size: 13px; color: var(--muted); }
+.items .total { display: flex; justify-content: space-between; padding: 12px 14px; border-top: 1px solid var(--line); font-weight: 700; }
+.copyrow { display: grid; grid-template-columns: 96px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; min-height: 52px; }
+.copyrow + .copyrow { border-top: 1px solid var(--line); }
+.copyrow label { color: var(--muted); font-size: 15px; }
+.copyrow input { border: 0; background: transparent; font-size: 16px; min-width: 0; width: 100%; padding: 8px 0; outline: none; }
+.copy { border: 0; background: var(--accent-soft); color: var(--accent); border-radius: 10px; font-size: 14px; font-weight: 600; padding: 8px 12px; min-height: 36px; }
+.steps { margin: 0; padding: 0 0 0 20px; font-size: 14px; color: var(--muted); display: grid; gap: 4px; }
+.steps b { color: var(--ink); }
+.attach { display: flex; gap: 10px; align-items: center; padding: 12px 14px; font-size: 14px; }
+.attach .file { font-family: var(--f-mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.attach svg { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.done-box { background: var(--ok-soft); color: var(--ok); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+.done-box p { margin: 0; font-size: 15px; }
+.done-box .confirm .btn-primary { background: var(--ok); color: var(--surface); }
+
+/* ---------- Lightbox ---------- */
+.lightbox { position: fixed; inset: 0; z-index: 60; background: #000; overflow: auto; display: grid; place-items: center; }
+.lightbox img { max-width: none; width: 100%; height: auto; touch-action: pinch-zoom pan-x pan-y; }
+.lightbox .close { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: 12px; background: rgba(255,255,255,.18); color: #fff; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 80;
+  background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 16px; font-size: 15px; display: flex; gap: 14px; align-items: center;
+  box-shadow: var(--shadow); max-width: calc(100% - 32px); width: max-content;
+}
+.toast button { border: 0; background: none; color: var(--accent-soft); font-weight: 700; padding: 4px; }
+
+/* ---------- Settings ---------- */
+.radio-row { display: flex; gap: 8px; padding: 12px 14px; flex-wrap: wrap; }
+.ph { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+.ph code { font-family: var(--f-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.small-btns { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 14px; }
+.small-btns .btn { min-height: 40px; font-size: 15px; padding: 0 14px; }
+.result { margin: 0 14px 14px; font-size: 14px; border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+.result ul { margin: 6px 0 0; padding-left: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet { animation: none; } .spin { animation-duration: 2.4s; }
+}
+@media (min-width: 700px) {
+  .top h1 { font-size: 40px; }
+}
+</style>
+
+<div class="wrap" id="home">
+  <header class="top">
+    <div>
+      <h1>Declaraties</h1>
+      <div class="sub" id="storageNote">Bonnen laden…</div>
+    </div>
+    <button class="icon-btn" id="openSettings" aria-label="Instellingen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <section class="summary" id="summary" aria-live="polite"></section>
+  <section class="setup" id="setupCard" hidden>
+    <h2>Eerst even instellen</h2>
+    <p>Je naam komt onder de mail. Het adres van de administratie kun je ook later invullen.</p>
+    <button class="btn btn-primary" id="setupGo">Instellen</button>
+  </section>
+
+  <div class="seg" role="tablist" aria-label="Filter">
+    <button role="tab" id="tabOpen" aria-selected="true">Te declareren</button>
+    <button role="tab" id="tabSent" aria-selected="false">Verstuurd</button>
+  </div>
+  <div id="list"></div>
+</div>
+
+<div class="dock">
+  <button class="scan" id="scanBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg>
+    Scan bon
+  </button>
+  <button class="pick" id="pickBtn" aria-label="Foto kiezen uit je fotobibliotheek">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-9 9"/></svg>
+  </button>
+</div>
+<input type="file" id="camInput" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">
+<input type="file" id="libInput" accept="image/*" class="sr" tabindex="-1" aria-hidden="true">
+<input type="file" id="icsInput" accept=".ics,text/calendar" class="sr" tabindex="-1" aria-hidden="true">
+
+<!-- Editor -->
+<section class="view" id="editor" hidden aria-label="Bon bewerken">
+  <div class="bar">
+    <button class="link l" id="edCancel">Annuleer</button>
+    <h2 id="edTitle">Nieuwe bon</h2>
+    <span class="r"></span>
+  </div>
+  <div class="inner">
+    <button class="photo" id="edPhoto" aria-label="Foto vergroten"><span class="none">Geen foto</span></button>
+    <div id="edStatus" class="status info" hidden></div>
+
+    <div class="group">
+      <div class="field" id="fAmount"><label for="inAmount">Bedrag</label><input id="inAmount" class="amount" inputmode="decimal" autocomplete="off" placeholder="€ 0,00"></div>
+      <div class="field" id="fDate"><label for="inDate">Datum</label><input id="inDate" type="date"></div>
+      <div class="field" id="fDesc"><label for="inDesc">Wat</label><input id="inDesc" placeholder="bijv. Lunch met klant" autocomplete="off"></div>
+      <div class="field" id="fMerchant"><label for="inMerchant">Winkel</label><input id="inMerchant" placeholder="bijv. NS, Albert Heijn" autocomplete="off"></div>
+    </div>
+    <div class="chips" id="catChips" aria-label="Categorie"></div>
+
+    <div class="group-title">Project</div>
+    <div class="group">
+      <div class="field" id="fProject"><label for="inProject">Projectcode</label><input id="inProject" class="code" placeholder="bijv. ABCD1234" maxlength="9" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+      <div id="projAgenda"></div>
+      <div id="projRecent"></div>
+    </div>
+
+    <div class="group-title" id="edSentTitle" hidden>Status</div>
+    <div class="group" id="edSentBox" hidden></div>
+
+    <div class="danger-zone" id="edDanger" hidden>
+      <button class="btn btn-danger btn-block" id="edDelete">Verwijder bon</button>
+      <div class="confirm" id="edDeleteConfirm" hidden>
+        <button class="btn btn-plain" id="edDeleteNo">Toch niet</button>
+        <button class="btn btn-danger" id="edDeleteYes">Ja, verwijderen</button>
+      </div>
+    </div>
+  </div>
+  <div class="actions"><div class="in">
+    <button class="btn btn-plain" id="edSave">Bewaar</button>
+    <button class="btn btn-primary" id="edDeclare">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+      <span id="edDeclareLabel">Declareer</span>
+    </button>
+  </div></div>
+</section>
+
+<!-- Settings -->
+<section class="view" id="settings" hidden aria-label="Instellingen">
+  <div class="bar">
+    <span class="l"></span>
+    <h2>Instellingen</h2>
+    <button class="link r" id="setDone"><b>Klaar</b></button>
+  </div>
+  <div class="inner">
+    <div class="group-title">Jij en de administratie</div>
+    <div class="group">
+      <div class="field"><label for="sName">Je naam</label><input id="sName" autocomplete="name" placeholder="Voor- en achternaam"></div>
+      <div class="field"><label for="sEmail">Administratie</label><input id="sEmail" type="email" inputmode="email" autocomplete="off" placeholder="administratie@bedrijf.nl"></div>
+      <div class="field"><label for="sIban">IBAN</label><input id="sIban" class="mono" autocomplete="off" placeholder="Optioneel: NL00 BANK 0123 4567 89" autocapitalize="characters"></div>
+    </div>
+
+    <div class="group-title">Werkagenda</div>
+    <div class="group">
+      <div class="hint top">De app zoekt op de datum van de bon naar afspraken met een projectcode (4 letters + 4 cijfers, bijv. ABCD1234) in de titel, beschrijving of locatie.</div>
+      <div class="radio-row" id="calSrc">
+        <button class="cat" data-src="google" aria-pressed="true">Google</button>
+        <button class="cat" data-src="sync" aria-pressed="false" hidden>Automatisch</button>
+        <button class="cat" data-src="ics" aria-pressed="false">Bestand (.ics)</button>
+        <button class="cat" data-src="none" aria-pressed="false">Geen</button>
+      </div>
+      <div id="calGoogle">
+        <div class="field"><label for="sCalId">Agenda</label><input id="sCalId" list="calList" autocomplete="off" placeholder="primary (je hoofdagenda)"></div>
+        <datalist id="calList"></datalist>
+        <div class="small-btns" style="padding-top:12px">
+          <button class="btn btn-soft" id="calTest">Test met vandaag</button>
+          <button class="btn btn-plain" id="calLoad">Toon mijn agenda’s</button>
+        </div>
+        <div class="result" id="calResult" hidden></div>
+      </div>
+      <div id="calSync" hidden>
+        <div class="hint top">Je agenda wordt elk uur bijgewerkt via GitHub, versleuteld met je eigen wachtwoord. Eenmalig instellen: zie de handleiding in je GitHub-project.</div>
+        <div class="field"><label for="sSyncPass">Wachtwoord</label><input id="sSyncPass" type="password" autocomplete="off" placeholder="zelfde als AGENDA_PASSWORD"></div>
+        <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="syncTest">Agenda ophalen</button></div>
+        <div class="result" id="syncResult" hidden></div>
+      </div>
+      <div id="calIcs" hidden>
+        <div class="hint top">Exporteer je werkagenda als .ics (Outlook: Agenda delen → Publiceren, of exporteren) en kies het bestand. Alleen afspraken met een projectcode worden bewaard.</div>
+        <div class="small-btns"><button class="btn btn-soft" id="icsPick">Kies .ics-bestand</button></div>
+        <div class="result" id="icsResult" hidden></div>
+      </div>
+    </div>
+
+    <div class="group-title">Mailtekst</div>
+    <div class="group">
+      <div class="field stack"><label for="sTpl">Bericht aan de administratie</label><textarea id="sTpl" rows="14"></textarea></div>
+      <div class="hint">Deze stukjes vult de app zelf in. Een regel waarvan het stukje leeg is (zoals IBAN), valt weg.</div>
+      <div class="ph"><code>{overzicht}</code><code>{totaal}</code><code>{naam}</code><code>{iban}</code><code>{aantal}</code><code>{bijlage}</code></div>
+      <div class="small-btns"><button class="btn btn-plain" id="tplReset">Standaardtekst herstellen</button></div>
+    </div>
+
+    <div class="group-title">Opslag</div>
+    <div class="group"><div class="hint top" id="storageInfo"></div></div>
+  </div>
+</section>
+
+<!-- Send sheet -->
+<div class="sheet-wrap" id="sendWrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
+    <div class="grabber"></div>
+    <div class="head">
+      <h2 id="sendTitle">Declareren</h2>
+      <button class="link" id="sendClose">Sluit</button>
+    </div>
+    <div class="group items" id="sendItems"></div>
+
+    <div class="group">
+      <div class="copyrow"><label for="mTo">Aan</label><input id="mTo" type="email" inputmode="email" placeholder="adres administratie" autocomplete="off"><button class="copy" data-copy="mTo">Kopieer</button></div>
+      <div class="copyrow"><label for="mSubject">Onderwerp</label><input id="mSubject" autocomplete="off"><button class="copy" data-copy="mSubject">Kopieer</button></div>
+      <div class="field stack"><label for="mBody">Bericht</label><textarea id="mBody" rows="12"></textarea></div>
+      <div class="attach" id="mAttach"></div>
+    </div>
+
+    <div id="sendMain" style="display:grid;gap:10px">
+      <button class="btn btn-primary btn-block" id="sendShare">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg>
+        <span id="sendShareLabel">Verstuur via Mail</span>
+      </button>
+      <ol class="steps" id="sendSteps">
+        <li>De mailtekst wordt gekopieerd en het deelmenu opent met de bijlage.</li>
+        <li>Kies <b>Mail</b>. Vul bij Aan het adres in.</li>
+        <li>Houd je vinger in het bericht en kies <b>Plak</b>. Verstuur.</li>
+      </ol>
+      <a class="btn btn-plain btn-block" id="sendMailto" href="#" target="_blank" rel="noopener">Open mailconcept zonder bijlage</a>
+    </div>
+    <div class="done-box" id="sendDone" hidden>
+      <p><b>Is de mail verstuurd?</b> Dan zet ik deze bonnen bij Verstuurd.</p>
+      <div class="confirm">
+        <button class="btn btn-plain" id="sendNotYet">Nog niet</button>
+        <button class="btn btn-primary" id="sendMark">Ja, verstuurd</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings quick (onboarding) uses the settings view -->
+
+<div class="lightbox" id="lightbox" hidden><img id="lbImg" alt="Foto van de bon"><button class="icon-btn close" id="lbClose" aria-label="Sluit foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>/*@LIB@*/</script>
+<script>
+(() => {
+'use strict';
+const WEB = !!window.DECL_WEB;          // the free web app (own hosting, no Claude)
+const VENDOR = 'vendor/';
+
+/* ================= helpers ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, props = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (k === 'style') n.style.cssText = v;
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c.nodeType ? c : String(c));
+  return n;
+};
+const icon = svg => { const t = document.createElement('template'); t.innerHTML = svg.trim(); return t.content.firstChild; };
+const uid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const todayStr = () => ymd(new Date());
+const parseYmd = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const MONTHS = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const DAYS = ['zo','ma','di','wo','do','vr','za'];
+const fmtLong = s => { const d = parseYmd(s); return d ? `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : '—'; };
+const fmtShort = s => { const d = parseYmd(s); return d ? `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}` : 'geen datum'; };
+const fmtNum = s => { const d = parseYmd(s); return d ? `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}` : ''; };
+const eur = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
+const money = n => (typeof n === 'number' && isFinite(n)) ? eur.format(n).replace(/ /g, ' ') : '€ –';
+function parseAmount(v) {
+  if (typeof v === 'number') return isFinite(v) ? Math.round(v * 100) / 100 : null;
+  let s = String(v || '').replace(/[€\s]|EUR/gi, '');
+  if (!s) return null;
+  if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(/,/g, '');
+  const n = Number(s);
+  return isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+const amountInput = n => (typeof n === 'number' && isFinite(n)) ? n.toFixed(2).replace('.', ',') : '';
+const VALID_CODE = /^[A-Z]{4}\d{4}$/;
+const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const { findCodes } = window.DeclLib;
+const CATS = ['Reiskosten', 'Parkeren', 'Maaltijd', 'Verblijf', 'Materiaal', 'Overig'];
+const DEFAULT_TEMPLATE = `Beste administratie,
+
+Hierbij dien ik {aantal} in. {bijlage}
+
+{overzicht}
+
+Totaal te vergoeden: {totaal}
+Graag overmaken naar {iban} t.n.v. {naam}.
+
+Laat het gerust weten als er nog iets ontbreekt.
+
+Met vriendelijke groet,
+
+{naam}`;
+const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', template: DEFAULT_TEMPLATE };
+
+let toastTimer;
+function toast(msg, action) {
+  const t = $('#toast'); t.replaceChildren(el('span', { text: msg }));
+  if (action) t.append(el('button', { text: action.label, onclick: () => { t.hidden = true; action.run(); } }));
+  t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, action ? 6000 : 2600);
+}
+async function copyText(text, inputEl) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { if (inputEl) { inputEl.focus(); inputEl.select?.(); } return false; }
+}
+
+/* ================= image handling ================= */
+function loadImage(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('img')); i.src = src; });
+}
+async function compress(file, max = 2000, q = 0.82) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    return await new Promise(r => c.toBlob(b => r(b || file), 'image/jpeg', q));
+  } catch { return file; } finally { URL.revokeObjectURL(url); }
+}
+const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+
+/* ================= storage ================= */
+// Local: IndexedDB on this device. Cloud: the artifact's own store (db + assets), synced to the Claude account.
+const Local = {
+  db: null, mem: { recs: new Map(), blobs: new Map(), kv: new Map() },
+  async open() {
+    try {
+      this.db = await new Promise((res, rej) => {
+        const r = indexedDB.open('declaratie-app', 1);
+        r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('recs', { keyPath: 'id' }); d.createObjectStore('blobs'); d.createObjectStore('kv'); };
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+    } catch { this.db = null; }
+  },
+  req(store, mode, fn) {
+    if (!this.db) return Promise.reject(new Error('no idb'));
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction(store, mode); const r = fn(tx.objectStore(store));
+      tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+    });
+  },
+  async all() { try { return await this.req('recs', 'readonly', s => s.getAll()) || []; } catch { return [...this.mem.recs.values()]; } },
+  async put(rec) { this.mem.recs.set(rec.id, rec); try { await this.req('recs', 'readwrite', s => s.put(rec)); } catch {} },
+  async del(id) { this.mem.recs.delete(id); try { await this.req('recs', 'readwrite', s => s.delete(id)); } catch {} },
+  async putBlob(k, b) { this.mem.blobs.set(k, b); try { await this.req('blobs', 'readwrite', s => s.put(b, k)); } catch {} },
+  async getBlob(k) { if (this.mem.blobs.has(k)) return this.mem.blobs.get(k); try { const b = await this.req('blobs', 'readonly', s => s.get(k)); if (b) this.mem.blobs.set(k, b); return b || null; } catch { return null; } },
+  async delBlob(k) { this.mem.blobs.delete(k); try { await this.req('blobs', 'readwrite', s => s.delete(k)); } catch {} },
+  async getKV(k) { if (this.mem.kv.has(k)) return this.mem.kv.get(k); try { return await this.req('kv', 'readonly', s => s.get(k)) ?? null; } catch { return null; } },
+  async setKV(k, v) { this.mem.kv.set(k, v); try { await this.req('kv', 'readwrite', s => s.put(v, k)); } catch {} },
+};
+
+const Cloud = { db: null, assets: null, base: null };
+let mode = 'local'; // 'cloud' once db is available
+
+const Store = {
+  async list() {
+    if (mode === 'cloud') {
+      const snap = await Cloud.db.collection(Cloud.base + '/recs').get();
+      return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    }
+    return Local.all();
+  },
+  async put(rec) {
+    const clean = JSON.parse(JSON.stringify(rec));
+    if (mode === 'cloud') await Cloud.db.doc(`${Cloud.base}/recs/${rec.id}`).set(clean);
+    else await Local.put(clean);
+  },
+  async del(rec) {
+    if (mode === 'cloud') {
+      await Cloud.db.doc(`${Cloud.base}/recs/${rec.id}`).delete();
+      if (rec.photo?.asset && Cloud.assets) Cloud.assets.delete(rec.photo.asset).catch(() => {});
+    } else await Local.del(rec.id);
+    Local.delBlob(rec.id);
+  },
+  async getSettings() {
+    let s = null;
+    if (mode === 'cloud') { const d = await Cloud.db.doc(Cloud.base).get(); s = d.exists ? d.data() : null; }
+    else s = await Local.getKV('settings');
+    return { ...DEFAULTS, ...(s || {}) };
+  },
+  async saveSettings(s) {
+    const { icsEvents, ...rest } = s;
+    if (mode === 'cloud') await Cloud.db.doc(Cloud.base).set(JSON.parse(JSON.stringify(rest)));
+    else await Local.setKV('settings', rest);
+  },
+  async getIcs() {
+    if (mode === 'cloud') { const d = await Cloud.db.doc(Cloud.base + '/cal/ics').get(); return d.exists ? d.data() : null; }
+    return Local.getKV('ics');
+  },
+  async saveIcs(v) {
+    if (mode === 'cloud') await Cloud.db.doc(Cloud.base + '/cal/ics').set(v);
+    else await Local.setKV('ics', v);
+  },
+  async savePhoto(rec, blob) {
+    await Local.putBlob(rec.id, blob);
+    if (mode === 'cloud' && Cloud.assets) {
+      try { const up = await Cloud.assets.upload(blob, {}); rec.photo = { asset: up.id }; return; }
+      catch (e) { console.warn('upload', e); }
+    }
+    rec.photo = { local: true };
+  },
+};
+
+const urlCache = new Map();
+async function photoURL(rec) {
+  if (urlCache.has(rec.id)) return urlCache.get(rec.id);
+  const b = await Local.getBlob(rec.id);
+  let u = null;
+  if (b) u = URL.createObjectURL(b);
+  else if (rec.photo?.asset) u = '/_blob/' + rec.photo.asset;
+  if (u) urlCache.set(rec.id, u);
+  return u;
+}
+async function photoBlob(rec) {
+  if (draftBlob && editing && editing.id === rec.id) return draftBlob;
+  const b = await Local.getBlob(rec.id); if (b) return b;
+  if (!rec.photo?.asset) return null;
+  const src = '/_blob/' + rec.photo.asset;
+  try { const r = await fetch(src); if (r.ok) { const blob = await r.blob(); Local.putBlob(rec.id, blob); return blob; } } catch {}
+  try {
+    const img = await loadImage(src); const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  } catch { return null; }
+}
+
+/* ================= state ================= */
+let recs = [];
+let settings = { ...DEFAULTS };
+let icsData = null;
+let tab = 'open';
+let editing = null;     // record being edited (copy)
+let editingIsNew = false;
+let draftBlob = null;   // photo of the record in the editor, not yet saved
+let aiFilled = new Set();
+const caps = { sample: null, mcp: null, downloads: null };
+let sampleImages = false;
+
+/* ================= home ================= */
+function sortRecs(a) { return a.sort((x, y) => (y.date || '').localeCompare(x.date || '') || (y.created || 0) - (x.created || 0)); }
+const isComplete = r => typeof r.amount === 'number' && r.amount > 0 && VALID_CODE.test(r.project || '') && (r.description || r.merchant);
+
+function renderHome() {
+  $('#tabOpen').setAttribute('aria-selected', tab === 'open');
+  $('#tabSent').setAttribute('aria-selected', tab === 'sent');
+  const open = recs.filter(r => r.status !== 'sent');
+  const sent = recs.filter(r => r.status === 'sent');
+  const sum = a => a.reduce((t, r) => t + (r.amount || 0), 0);
+
+  const S = $('#summary'); S.replaceChildren();
+  if (tab === 'open') {
+    const missing = open.filter(r => !isComplete(r)).length;
+    S.append(
+      el('div', {}, el('div', { class: 'label', text: 'Nog te declareren' }), el('div', { class: 'big', text: money(sum(open)) })),
+      el('div', { class: 'meta' },
+        el('span', { text: open.length === 1 ? '1 bon' : `${open.length} bonnen` }),
+        missing ? el('span', { class: 'chip warn', text: `${missing} nog aanvullen` }) : null),
+      el('button', { class: 'btn btn-primary btn-block', disabled: open.length === 0, onclick: () => openSend(open.filter(isComplete).map(r => r.id), open.map(r => r.id)) },
+        open.length > 1 ? `Declareer alles (${open.length})` : 'Declareer')
+    );
+  } else {
+    const yr = String(new Date().getFullYear());
+    S.append(
+      el('div', {}, el('div', { class: 'label', text: `Verstuurd in ${yr}` }), el('div', { class: 'big', text: money(sum(sent.filter(r => (r.sentAt || '').startsWith(yr)))) })),
+      el('div', { class: 'meta' }, el('span', { text: sent.length === 1 ? '1 bon verstuurd' : `${sent.length} bonnen verstuurd` }))
+    );
+  }
+
+  const L = $('#list'); L.replaceChildren();
+  const items = sortRecs(tab === 'open' ? open : sent);
+  if (!items.length) {
+    L.append(el('div', { class: 'empty' },
+      el('div', { class: 'receipt', 'aria-hidden': 'true' }, el('i'), el('i'), el('i'), el('i')),
+      tab === 'open' ? el('h2', { text: 'Geen open bonnen' }) : el('h2', { text: 'Nog niets verstuurd' }),
+      el('p', { text: tab === 'open' ? 'Tik op Scan bon en fotografeer je kassabon. Bedrag, datum en project vult de app voor je in.' : 'Bonnen die je declareert, komen hier te staan.' })));
+    return;
+  }
+  const groups = new Map();
+  for (const r of items) {
+    const k = (r.date || '').slice(0, 7) || 'zonder';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  for (const [k, rs] of groups) {
+    const d = parseYmd(k + '-01');
+    L.append(el('div', { class: 'month' }, el('span', { text: d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : 'Zonder datum' }), el('span', { class: 'mono', text: money(sum(rs)) })));
+    const list = el('div', { class: 'list' });
+    for (const r of rs) list.append(rowFor(r));
+    L.append(list);
+  }
+}
+function thumbFor(r) {
+  const t = el('div', { class: 'thumb' });
+  photoURL(r).then(u => { if (u) t.append(el('img', { src: u, alt: '', loading: 'lazy' })); });
+  return t;
+}
+function rowFor(r) {
+  const title = r.description || r.merchant || 'Bon';
+  const sub = el('div', { class: 's' });
+  sub.append(VALID_CODE.test(r.project || '') ? el('span', { class: 'chip code', text: r.project }) : el('span', { class: 'chip warn', text: 'Geen project' }));
+  sub.append(el('span', { text: [r.merchant && r.merchant !== title ? r.merchant : null, fmtShort(r.date)].filter(Boolean).join(' · ') }));
+  return el('button', { class: 'row', onclick: () => openEditor(r) },
+    thumbFor(r),
+    el('div', { style: 'min-width:0' }, el('div', { class: 't', text: title }), sub),
+    el('div', { class: 'amt' }, money(r.amount), r.status === 'sent' ? el('small', { text: 'verstuurd ' + fmtShort(r.sentAt) }) : null));
+}
+
+/* ================= capture ================= */
+$('#scanBtn').onclick = () => $('#camInput').click();
+$('#pickBtn').onclick = () => $('#libInput').click();
+for (const id of ['#camInput', '#libInput']) {
+  $(id).addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    const blob = await compress(f);
+    startNew(blob);
+  });
+}
+function startNew(blob) {
+  const rec = { id: uid(), created: Date.now(), status: 'open', amount: null, date: todayStr(), description: '', merchant: '', category: '', project: '', projectSource: '' };
+  draftBlob = blob;
+  openEditor(rec, true);
+  readReceipt();
+}
+
+/* ================= editor ================= */
+const inAmount = $('#inAmount'), inDate = $('#inDate'), inDesc = $('#inDesc'), inMerchant = $('#inMerchant'), inProject = $('#inProject');
+const fieldOf = { amount: '#fAmount', date: '#fDate', description: '#fDesc', merchant: '#fMerchant', project: '#fProject' };
+let readCtl = null;
+
+function setStatus(kind, html) {
+  const s = $('#edStatus');
+  if (!kind) { s.hidden = true; return; }
+  s.className = 'status ' + kind; s.hidden = false; s.replaceChildren(...html);
+}
+function markAI(key, on) {
+  const f = $(fieldOf[key]); if (!f) return;
+  f.classList.toggle('ai', !!on);
+  if (on) aiFilled.add(key); else aiFilled.delete(key);
+}
+
+async function openEditor(rec, isNew = false) {
+  editing = JSON.parse(JSON.stringify(rec));
+  editingIsNew = isNew;
+  if (!isNew) draftBlob = null;
+  aiFilled.clear();
+  for (const k of Object.keys(fieldOf)) { markAI(k, false); $(fieldOf[k]).classList.remove('bad'); }
+  $('#edTitle').textContent = isNew ? 'Nieuwe bon' : (rec.status === 'sent' ? 'Verstuurde bon' : 'Bon');
+  inAmount.value = amountInput(editing.amount);
+  inDate.value = editing.date || '';
+  inDesc.value = editing.description || '';
+  inMerchant.value = editing.merchant || '';
+  inProject.value = editing.project || '';
+  renderCats();
+  setStatus(null);
+  $('#edDanger').hidden = isNew; $('#edDeleteConfirm').hidden = true; $('#edDelete').hidden = false;
+  const sent = editing.status === 'sent';
+  $('#edSentTitle').hidden = !sent; $('#edSentBox').hidden = !sent;
+  if (sent) {
+    $('#edSentBox').replaceChildren(
+      el('div', { class: 'hint top', text: `Verstuurd op ${fmtLong(editing.sentAt)}${editing.sentTo ? ' naar ' + editing.sentTo : ''}.` }),
+      el('div', { class: 'small-btns' }, el('button', { class: 'btn btn-plain', onclick: reopenRec, text: 'Zet terug naar Te declareren' })));
+  }
+  $('#edDeclareLabel').textContent = sent ? 'Opnieuw versturen' : 'Declareer';
+
+  const ph = $('#edPhoto'); ph.replaceChildren(el('span', { class: 'none', text: 'Foto laden…' }));
+  const u = draftBlob ? URL.createObjectURL(draftBlob) : await photoURL(editing);
+  ph.replaceChildren(u ? el('img', { src: u, alt: 'Foto van de bon' }) : el('span', { class: 'none', text: 'Geen foto' }));
+  if (u) ph.append(el('span', { class: 'zoom', text: 'Tik om te vergroten' }));
+  ph.dataset.src = u || '';
+
+  show('editor');
+  renderRecentProjects();
+  if (!(isNew && canReadReceipt())) lookupProjects(); // a new scan looks up the agenda once the date is read
+}
+
+function renderCats() {
+  const box = $('#catChips'); box.replaceChildren();
+  for (const c of CATS) box.append(el('button', { class: 'cat', 'aria-pressed': editing.category === c ? 'true' : 'false', text: c, onclick: () => { editing.category = editing.category === c ? '' : c; renderCats(); } }));
+}
+
+function readFields() {
+  editing.amount = parseAmount(inAmount.value);
+  editing.date = inDate.value || '';
+  editing.description = inDesc.value.trim();
+  editing.merchant = inMerchant.value.trim();
+  editing.project = normCode(inProject.value);
+}
+inAmount.addEventListener('input', () => markAI('amount', false));
+inAmount.addEventListener('blur', () => { const n = parseAmount(inAmount.value); if (n != null) inAmount.value = amountInput(n); });
+inDesc.addEventListener('input', () => markAI('description', false));
+inMerchant.addEventListener('input', () => markAI('merchant', false));
+inDate.addEventListener('change', () => {
+  markAI('date', false); editing.date = inDate.value;
+  if (editing.projectSource === 'auto') { editing.project = ''; inProject.value = ''; markAI('project', false); }
+  lookupProjects();
+});
+inProject.addEventListener('input', () => {
+  markAI('project', false);
+  const v = normCode(inProject.value); inProject.value = v;
+  editing.project = v; editing.projectSource = 'manual';
+  $('#fProject').classList.toggle('bad', v.length >= 8 && !VALID_CODE.test(v));
+  highlightProjectChips();
+});
+
+$('#edPhoto').onclick = () => { const s = $('#edPhoto').dataset.src; if (!s) return; $('#lbImg').src = s; $('#lightbox').hidden = false; };
+$('#lbClose').onclick = () => { $('#lightbox').hidden = true; };
+
+const SPARK = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7z"/></svg>';
+const canReadReceipt = () => (caps.sample && sampleImages) || WEB;
+function applyReading(r) {
+  const total = parseAmount(r.total);
+  if (total != null && !inAmount.value) { inAmount.value = amountInput(total); markAI('amount', true); }
+  if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) { inDate.value = r.date; editing.date = r.date; markAI('date', true); }
+  if (r.merchant && !inMerchant.value) { inMerchant.value = String(r.merchant).slice(0, 60); markAI('merchant', true); }
+  if (r.description && !inDesc.value) { inDesc.value = String(r.description).slice(0, 60); markAI('description', true); }
+  if (r.category && CATS.includes(r.category) && !editing.category) { editing.category = r.category; renderCats(); }
+  return [total == null && 'bedrag', !r.date && 'datum'].filter(Boolean);
+}
+
+/* on-device text recognition (web app): Tesseract, served with the app */
+let ocrWorkerP = null, ocrProgress = null;
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script ' + src)); document.head.append(s); });
+}
+function getOcr() {
+  if (!ocrWorkerP) ocrWorkerP = (async () => {
+    if (!window.Tesseract) await loadScript(VENDOR + 'tesseract.min.js');
+    return window.Tesseract.createWorker('nld', 1, {
+      workerPath: VENDOR + 'worker.min.js', corePath: VENDOR, langPath: VENDOR + 'lang', gzip: true,
+      logger: m => ocrProgress && ocrProgress(m),
+    });
+  })().catch(e => { ocrWorkerP = null; throw e; });
+  return ocrWorkerP;
+}
+async function ocrImage(blob) {
+  // grey, stretched contrast and at least ~1400px wide: clearly better results on thermal paper
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(2.2, Math.max(1, 1400 / img.naturalWidth));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+    const id = ctx.getImageData(0, 0, w, h), d = id.data, hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 4) { const g = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; d[i] = g; hist[g]++; }
+    const n = w * h; let lo = 0, hi = 255, acc = 0;
+    for (; lo < 255 && (acc += hist[lo]) < n * 0.02; lo++);
+    acc = 0; for (; hi > 0 && (acc += hist[hi]) < n * 0.02; hi--);
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < d.length; i += 4) { const v = Math.max(0, Math.min(255, (d[i] - lo) * 255 / span)); d[i] = d[i + 1] = d[i + 2] = v; }
+    ctx.putImageData(id, 0, 0);
+    const worker = await getOcr();
+    const { data } = await worker.recognize(c);
+    return data.text || '';
+  } finally { URL.revokeObjectURL(url); }
+}
+async function readReceiptOnDevice(recId) {
+  setStatus('ai', [el('span', { class: 'spin' }), el('span', { id: 'ocrMsg', text: 'Bon lezen op je telefoon…' })]);
+  ocrProgress = m => {
+    const t = $('#ocrMsg'); if (!t || !editing || editing.id !== recId) return;
+    if (/load|initializ/i.test(m.status)) t.textContent = 'Tekstherkenning klaarzetten… (de eerste keer even geduld)';
+    else if (m.status === 'recognizing text') t.textContent = `Bon lezen op je telefoon… ${Math.round((m.progress || 0) * 100)}%`;
+  };
+  try {
+    const text = await ocrImage(draftBlob);
+    if (!editing || editing.id !== recId) return;
+    const r = window.DeclLib.parseReceipt(text, todayStr());
+    if (r.total == null && !r.date) {
+      setStatus('err', [el('span', { text: 'Op deze foto is geen bedrag of datum gevonden. Vul de velden zelf in, of maak een foto recht van boven met goed licht.' })]);
+      return;
+    }
+    const missing = applyReading(r);
+    const unsure = r.total != null && !r.confident;
+    setStatus(missing.length || unsure ? 'err' : 'ai', [icon(SPARK), el('span', {
+      text: missing.length ? `Gelezen, maar ${missing.join(' en ')} niet gevonden. Vul dat zelf aan.`
+        : unsure ? 'Gelezen, maar het totaal stond niet duidelijk op de bon. Controleer vooral het bedrag.'
+        : 'Gelezen. Controleer de velden met ✦ en pas aan waar nodig.' })]);
+  } catch (e) {
+    console.error(e);
+    if (!editing || editing.id !== recId) return;
+    setStatus('err', [el('span', { text: 'Uitlezen lukte niet. Vul de velden zelf in.', style: 'flex:1' }), el('button', { class: 'copy', text: 'Opnieuw', onclick: readReceipt })]);
+  } finally {
+    ocrProgress = null;
+    if (editing && editing.id === recId) lookupProjects();
+  }
+}
+
+async function readReceipt() {
+  if (!(caps.sample && sampleImages)) {
+    if (WEB && draftBlob) return readReceiptOnDevice(editing.id);
+    setStatus('info', [el('span', { text: 'Vul bedrag, datum en omschrijving in. Automatisch uitlezen is in deze weergave niet beschikbaar.' })]);
+    setTimeout(() => inAmount.focus(), 300);
+    return;
+  }
+  readCtl?.abort(); const ctl = readCtl = new AbortController();
+  const recId = editing.id;
+  setStatus('ai', [el('span', { class: 'spin' }), el('span', { text: 'Bon wordt gelezen… Bedrag, datum en winkel verschijnen zo.' })]);
+  const prompt = `Je krijgt een foto van een kassabon, pinbon of factuur. Lees hem uit voor een onkostendeclaratie. Vandaag is het ${todayStr()}.
+
+Antwoord met ALLEEN dit JSON-object:
+{"total": 12.34, "date": "2026-10-05", "merchant": "Albert Heijn", "description": "Lunch met klant", "category": "Maaltijd", "readable": true}
+
+Regels:
+- total: het eindbedrag dat betaald is, inclusief btw (staat bij Totaal, Te betalen, Pin, Betaald of Bedrag). Niet een subtotaal, niet het btw-bedrag, niet wisselgeld of "contant ontvangen". Getal met punt als decimaalteken. Onbekend: null.
+- date: de transactiedatum op de bon als JJJJ-MM-DD. Nederlandse bonnen schrijven dag-maand-jaar (05-10-26 is 5 oktober 2026). Onbekend: null.
+- merchant: naam van de winkel of het bedrijf, kort. Onbekend: null.
+- description: korte Nederlandse omschrijving van wat er betaald is, 1 tot 5 woorden, zonder winkelnaam. Bijvoorbeeld "Lunch", "Parkeren", "Treinkaartje", "Kantoorartikelen", "Brandstof", "Hotelovernachting".
+- category: precies een van ${CATS.map(c => `"${c}"`).join(', ')}.
+- readable: false als de foto geen bon is of niet leesbaar; zet dan de andere velden op null.`;
+  try {
+    const r = await caps.sample.json(prompt, { images: draftBlob, modelTier: "default", signal: ctl.signal });
+    if (!editing || editing.id !== recId) return;
+    if (!r || r.readable === false) {
+      setStatus('err', [el('span', { text: 'De bon is niet goed leesbaar. Vul de velden zelf in of maak een scherpere foto.' })]);
+      return;
+    }
+    const missing = applyReading(r);
+    setStatus(missing.length ? 'err' : 'ai', [
+      icon(SPARK),
+      el('span', { text: missing.length ? `Gelezen, maar ${missing.join(' en ')} niet gevonden. Vul dat zelf aan.` : 'Gelezen. Controleer de velden met ✦ en pas aan waar nodig.' })]);
+  } catch (e) {
+    if (e && e.code === 'cancelled') return;
+    if (!editing || editing.id !== recId) return;
+    const msg = {
+      not_granted: 'Uitlezen staat uit omdat Claude geen toestemming kreeg. Vul de velden zelf in.',
+      rate_limited: 'Even te veel aanvragen. Vul de velden zelf in of probeer het zo opnieuw.',
+      image_rejected: 'Deze foto kan niet gelezen worden. Probeer een andere foto.',
+      invalid_json: 'De bon kon niet goed worden gelezen. Vul de velden zelf in.',
+    }[e && e.code] || 'Uitlezen lukte niet. Vul de velden zelf in.';
+    const retry = ['rate_limited', 'upstream_error', 'invalid_json', 'empty_completion'].includes(e && e.code) || !(e && e.code);
+    setStatus('err', [el('span', { text: msg, style: 'flex:1' }), retry ? el('button', { class: 'copy', text: 'Opnieuw', onclick: readReceipt }) : null]);
+  } finally {
+    if (editing && editing.id === recId && !ctl.signal.aborted) lookupProjects();
+  }
+}
+
+/* ---------- projects ---------- */
+let lookupSeq = 0;
+let agendaHits = [];
+async function lookupProjects() {
+  const box = $('#projAgenda');
+  const date = editing && (inDate.value || editing.date);
+  const seq = ++lookupSeq;
+  agendaHits = [];
+  if (!date || settings.calSource === 'none') { box.replaceChildren(); return; }
+  box.replaceChildren(el('div', { class: 'hint top' }, el('span', { class: 'spin', style: 'display:inline-block;vertical-align:-3px;margin-right:8px' }), `Agenda van ${fmtShort(date)} bekijken…`));
+  let hits = [], err = null;
+  try { hits = await agendaFor(date); } catch (e) { err = e; }
+  if (seq !== lookupSeq) return;
+  agendaHits = hits;
+  box.replaceChildren();
+  if (err) {
+    box.append(el('div', { class: 'hint top', text: calErrorText(err) }));
+    return;
+  }
+  if (!hits.length) {
+    box.append(el('div', { class: 'hint top', text: `Geen afspraak met projectcode op ${fmtShort(date)}. Kies hieronder een recent project of typ de code.` }));
+    return;
+  }
+  box.append(el('div', { class: 'hint top', text: `Uit je agenda op ${fmtShort(date)}:` }));
+  const chips = el('div', { class: 'chips', style: 'padding-top:4px' });
+  for (const h of hits) chips.append(el('button', { class: 'pchip', 'data-code': h.code, onclick: () => pickProject(h.code, 'agenda') }, el('b', { text: h.code }), el('span', { text: `${h.time} · ${h.title}` })));
+  box.append(chips);
+  const codes = [...new Set(hits.map(h => h.code))];
+  if (!editing.project && codes.length === 1) { pickProject(codes[0], 'auto'); markAI('project', true); }
+  else if (!editing.project && codes.length > 1) box.append(el('div', { class: 'hint', text: 'Meerdere projecten op deze dag. Tik op het juiste.' }));
+  highlightProjectChips();
+}
+function pickProject(code, src) {
+  inProject.value = code; editing.project = code; editing.projectSource = src;
+  $('#fProject').classList.remove('bad'); markAI('project', false);
+  highlightProjectChips();
+}
+function highlightProjectChips() {
+  for (const b of document.querySelectorAll('#editor .pchip')) b.setAttribute('aria-pressed', b.dataset.code === editing.project ? 'true' : 'false');
+}
+function renderRecentProjects() {
+  const box = $('#projRecent'); box.replaceChildren();
+  const seen = new Map();
+  for (const r of [...recs].sort((a, b) => (b.created || 0) - (a.created || 0))) {
+    if (VALID_CODE.test(r.project || '') && !seen.has(r.project)) seen.set(r.project, r);
+    if (seen.size >= 6) break;
+  }
+  if (!seen.size) return;
+  box.append(el('div', { class: 'hint top', text: 'Recent gebruikt:' }));
+  const chips = el('div', { class: 'chips', style: 'padding-top:4px' });
+  for (const [code, r] of seen) chips.append(el('button', { class: 'pchip', 'data-code': code, onclick: () => pickProject(code, 'recent') }, el('b', { text: code }), el('span', { text: r.description || r.merchant || fmtShort(r.date) })));
+  box.append(chips);
+  highlightProjectChips();
+}
+
+function eventWhen(ev) {
+  const s = ev.start || {}, e = ev.end || {};
+  if (s.date && !s.dateTime) return 'hele dag';
+  const t = v => { const m = /T(\d{2}):(\d{2})/.exec(v || ''); return m ? `${m[1]}:${m[2]}` : ''; };
+  return [t(s.dateTime), t(e.dateTime)].filter(Boolean).join('–');
+}
+async function agendaFor(date) {
+  if (settings.calSource === 'sync') {
+    const data = await syncAgenda(false);
+    return data.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
+  }
+  if (settings.calSource === 'ics') {
+    if (!icsData || !icsData.events) throw { code: 'no_ics' };
+    return icsData.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
+  }
+  if (!caps.mcp) throw { code: 'no_mcp' };
+  const input = { startTime: date + 'T00:00:00', endTime: addDays(date, 1) + 'T00:00:00', pageSize: 100, orderBy: 'startTime' };
+  if (settings.calendarId) input.calendarId = settings.calendarId;
+  const res = await caps.mcp.callTool('Google Calendar', 'list_events', input, { cache: { staleTime: 60000, gcTime: 600000 } });
+  let p = res && res.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = {}; } }
+  const events = (p && (p.events || p.items)) || [];
+  const hits = [];
+  for (const ev of events) {
+    if (ev.status === 'cancelled') continue;
+    const text = [ev.summary, ev.description, ev.location].filter(Boolean).join(' \n ');
+    for (const code of findCodes(text)) hits.push({ code, title: ev.summary || '(zonder titel)', time: eventWhen(ev) });
+  }
+  return hits;
+}
+// agenda.enc is written by the GitHub workflow: {v, salt, iv, data}, AES-GCM with a key from the password.
+let syncCache = null, syncFetched = false;
+const b64 = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+async function decryptAgenda(file, pass) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(file.salt), iterations: file.iter || 210000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(file.iv) }, key, b64(file.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+async function syncAgenda(force) {
+  if (syncCache && (syncFetched || !navigator.onLine) && !force) return syncCache;
+  if (!settings.syncPass) throw { code: 'no_pass' };
+  if (!syncCache) syncCache = await Local.getKV('agendaSync');
+  try {
+    const res = await fetch('agenda.enc?t=' + Date.now(), { cache: 'no-store' });
+    if (res.status === 404) throw { code: 'no_sync_file' };
+    if (!res.ok) throw { code: 'sync_net' };
+    const file = await res.json();
+    let data;
+    try { data = await decryptAgenda(file, settings.syncPass); } catch { throw { code: 'bad_pass' }; }
+    syncCache = { events: data.events || [], updated: data.updated }; syncFetched = true;
+    Local.setKV('agendaSync', syncCache);
+  } catch (e) {
+    if (e && (e.code === 'bad_pass' || e.code === 'no_sync_file') || !syncCache) throw (e && e.code ? e : { code: 'sync_net' });
+  }
+  return syncCache;
+}
+function calErrorText(e) {
+  const c = e && e.code;
+  if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in.';
+  if (c === 'bad_pass') return 'Het agenda-wachtwoord klopt niet. Controleer het in Instellingen.';
+  if (c === 'no_sync_file') return 'Er is nog geen agenda opgehaald. Het automatisch bijwerken is nog niet ingesteld of nog niet gedraaid.';
+  if (c === 'sync_net') return 'Agenda niet bereikbaar (geen internet?). Typ de code of kies een recent project.';
+  if (c === 'no_ics') return 'Nog geen agendabestand ingelezen. Ga naar Instellingen → Werkagenda.';
+  if (c === 'no_mcp') return 'De agenda is in deze weergave niet bereikbaar. Typ de projectcode of kies een recent project.';
+  if (c === 'needs_reauth') return 'Google Agenda moet opnieuw gekoppeld worden: claude.ai → Instellingen → Connectors.';
+  if (c === 'server_not_connected' || c === 'selection_required') return 'Koppel Google Agenda in claude.ai → Instellingen → Connectors om projecten automatisch te vinden.';
+  if (c === 'not_in_manifest' || c === 'not_granted') return 'De app mag je agenda niet lezen. Sta het toe via het menu van deze app (Machtigingen).';
+  if (c === 'tool_error') return `De agenda gaf een fout${settings.calendarId ? ' (klopt de agenda-ID?)' : ''}. Typ de code of controleer de agenda in Instellingen.`;
+  return 'Agenda tijdelijk niet bereikbaar. Typ de projectcode of kies een recent project.';
+}
+
+/* ---------- save / delete ---------- */
+function validate(forDeclare) {
+  readFields();
+  const bad = [];
+  if (!(editing.amount > 0)) bad.push('amount');
+  if (!editing.date) bad.push('date');
+  if (forDeclare && !VALID_CODE.test(editing.project)) bad.push('project');
+  if (forDeclare && !editing.description && !editing.merchant) bad.push('description');
+  if (editing.project && !VALID_CODE.test(editing.project)) bad.push('project');
+  for (const k of Object.keys(fieldOf)) $(fieldOf[k]).classList.toggle('bad', bad.includes(k));
+  return bad;
+}
+const NAMES = { amount: 'bedrag', date: 'datum', project: 'projectcode (4 letters + 4 cijfers)', description: 'omschrijving' };
+async function saveEditing(forDeclare) {
+  const bad = validate(forDeclare);
+  if (bad.length) { toast('Vul nog in: ' + [...new Set(bad)].map(k => NAMES[k]).join(', ')); return null; }
+  const btns = [$('#edSave'), $('#edDeclare')]; btns.forEach(b => b.disabled = true);
+  const label = $('#edSave').textContent; $('#edSave').textContent = 'Opslaan…';
+  try {
+    if (draftBlob) await Store.savePhoto(editing, draftBlob);
+    await Store.put(editing);
+    if (draftBlob) { urlCache.delete(editing.id); }
+    draftBlob = null;
+    const i = recs.findIndex(r => r.id === editing.id);
+    if (i >= 0) recs[i] = editing; else recs.push(editing);
+    return editing;
+  } catch (e) {
+    console.error(e); toast('Opslaan lukte niet. Probeer het opnieuw.'); return null;
+  } finally { btns.forEach(b => b.disabled = false); $('#edSave').textContent = label; }
+}
+$('#edSave').onclick = async () => { const r = await saveEditing(false); if (r) { closeEditor(); toast('Bon bewaard'); } };
+$('#edDeclare').onclick = async () => { const r = await saveEditing(true); if (r) { closeEditor(); openSend([r.id], [r.id]); } };
+$('#edCancel').onclick = () => closeEditor();
+$('#edDelete').onclick = () => { $('#edDelete').hidden = true; $('#edDeleteConfirm').hidden = false; };
+$('#edDeleteNo').onclick = () => { $('#edDelete').hidden = false; $('#edDeleteConfirm').hidden = true; };
+$('#edDeleteYes').onclick = async () => {
+  const r = recs.find(x => x.id === editing.id); if (!r) return closeEditor();
+  try { await Store.del(r); recs = recs.filter(x => x.id !== r.id); closeEditor(); toast('Bon verwijderd'); }
+  catch { toast('Verwijderen lukte niet.'); }
+};
+async function reopenRec() {
+  editing.status = 'open'; delete editing.sentAt; delete editing.sentTo;
+  await Store.put(editing);
+  const i = recs.findIndex(r => r.id === editing.id); if (i >= 0) recs[i] = editing;
+  closeEditor(); tab = 'open'; renderHome(); toast('Teruggezet naar Te declareren');
+}
+function closeEditor() { readCtl?.abort(); editing = null; draftBlob = null; lookupSeq++; show('home'); renderHome(); }
+
+/* ================= send ================= */
+let sendIds = [];      // records in the sheet
+let sendChecked = new Set();
+let attachment = null; // {blob, name}
+let attachSeq = 0;
+
+function renderSteps() {
+  const steps = caps.downloads
+    ? ['De mailtekst wordt gekopieerd en het deelmenu opent met de bijlage.', 'Kies <b>Mail</b>. Vul bij Aan het adres in.', 'Houd je vinger in het bericht en kies <b>Plak</b>. Verstuur.']
+    : ['Het deelmenu opent met de bijlage en de mailtekst.', 'Kies <b>Mail</b>. Vul bij Aan het adres in (na de eerste keer vult je iPhone het aan).', 'Controleer het onderwerp en verstuur.'];
+  $('#sendSteps').innerHTML = steps.map(t => `<li>${t}</li>`).join('');
+}
+function openSend(checkedIds, allIds) {
+  renderSteps();
+  sendIds = allIds.slice();
+  sendChecked = new Set(checkedIds);
+  $('#mTo').value = settings.adminEmail || '';
+  $('#sendDone').hidden = true; $('#sendMain').hidden = false;
+  renderSend();
+  $('#sendWrap').hidden = false;
+}
+function selectedRecs() { return sortRecs(recs.filter(r => sendIds.includes(r.id) && sendChecked.has(r.id))).reverse(); }
+function renderSend() {
+  const box = $('#sendItems'); box.replaceChildren();
+  for (const id of sendIds) {
+    const r = recs.find(x => x.id === id); if (!r) continue;
+    const ok = isComplete(r);
+    const cb = el('input', { type: 'checkbox', id: 'cb_' + r.id, 'aria-label': 'Meenemen in deze declaratie', disabled: !ok });
+    cb.checked = ok && sendChecked.has(r.id);
+    cb.onchange = () => { if (cb.checked) sendChecked.add(r.id); else sendChecked.delete(r.id); renderSend(); };
+    box.append(el('label', { class: 'it', for: 'cb_' + r.id }, cb, thumbFor(r),
+      el('div', { style: 'min-width:0' },
+        el('div', { class: 't', text: r.description || r.merchant || 'Bon' }),
+        el('div', { class: 's' }, ok ? `${r.project} · ${fmtShort(r.date)}` : el('span', { class: 'chip warn', text: 'Vul eerst project/bedrag aan' }))),
+      el('div', { class: 'mono', text: money(r.amount) })));
+  }
+  const sel = selectedRecs();
+  const total = sel.reduce((t, r) => t + r.amount, 0);
+  box.append(el('div', { class: 'total' }, el('span', { text: sel.length === 1 ? '1 bon' : `${sel.length} bonnen` }), el('span', { class: 'mono', text: money(total) })));
+  $('#sendTitle').textContent = sel.length > 1 ? `${sel.length} bonnen declareren` : 'Declareren';
+  $('#mSubject').value = buildSubject(sel);
+  $('#mBody').value = buildBody(sel);
+  updateMailto();
+  $('#sendShare').disabled = !sel.length;
+  prepareAttachment(sel);
+}
+
+function overview(sel) {
+  if (sel.length === 1) {
+    const r = sel[0];
+    return [
+      `Project: ${r.project}`,
+      `Omschrijving: ${r.description || '-'}`,
+      r.merchant ? `Leverancier: ${r.merchant}` : null,
+      `Datum: ${fmtLong(r.date)}`,
+      `Bedrag: ${money(r.amount)}`,
+    ].filter(Boolean).join('\n');
+  }
+  const byProject = new Map();
+  for (const r of sel) { if (!byProject.has(r.project)) byProject.set(r.project, []); byProject.get(r.project).push(r); }
+  let n = 0; const out = [];
+  for (const [p, rs] of byProject) {
+    if (byProject.size > 1) out.push(`Project ${p}`);
+    for (const r of rs) out.push(`${++n}. ${fmtNum(r.date)} · ${byProject.size > 1 ? '' : r.project + ' · '}${r.description || r.merchant}${r.merchant && r.description ? ` (${r.merchant})` : ''} · ${money(r.amount)}`);
+    if (byProject.size > 1) { out.push(`Subtotaal ${p}: ${money(rs.reduce((t, r) => t + r.amount, 0))}`); out.push(''); }
+  }
+  while (out.length && out[out.length - 1] === '') out.pop();
+  return out.join('\n');
+}
+function buildSubject(sel) {
+  if (!sel.length) return '';
+  const total = money(sel.reduce((t, r) => t + r.amount, 0));
+  if (sel.length === 1) { const r = sel[0]; return `Declaratie ${r.project} – ${r.description || r.merchant} – ${total}`; }
+  const projects = [...new Set(sel.map(r => r.project))];
+  return `Declaraties ${projects.join(', ')} – ${sel.length} bonnen – ${total}`;
+}
+function buildBody(sel) {
+  if (!sel.length) return '';
+  const vals = {
+    overzicht: overview(sel),
+    totaal: money(sel.reduce((t, r) => t + r.amount, 0)),
+    naam: settings.name || '',
+    iban: (settings.iban || '').trim(),
+    aantal: sel.length === 1 ? 'een declaratie' : `${sel.length} declaraties`,
+    bijlage: sel.length === 1 ? 'De bon zit als foto in de bijlage.' : 'De bonnen zitten samen in de bijgevoegde pdf.',
+  };
+  const lines = (settings.template || DEFAULT_TEMPLATE).split('\n');
+  const out = [];
+  for (const line of lines) {
+    let empty = false;
+    const filled = line.replace(/\{(\w+)\}/g, (m, k) => { if (!(k in vals)) return m; if (!vals[k]) empty = true; return vals[k]; });
+    if (!empty) out.push(filled); // a line whose placeholder is empty (e.g. no IBAN) is left out
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+function updateMailto() {
+  const to = $('#mTo').value.trim();
+  const href = `mailto:${encodeURIComponent(to).replace(/%40/g, '@')}?subject=${encodeURIComponent($('#mSubject').value)}&body=${encodeURIComponent($('#mBody').value)}`;
+  $('#sendMailto').href = href;
+}
+$('#mSubject').addEventListener('input', updateMailto);
+$('#mBody').addEventListener('input', updateMailto);
+$('#mTo').addEventListener('input', updateMailto);
+$('#mTo').addEventListener('change', async () => {
+  const v = $('#mTo').value.trim();
+  if (v !== settings.adminEmail) { settings.adminEmail = v; try { await Store.saveSettings(settings); } catch {} }
+});
+for (const b of document.querySelectorAll('.copy[data-copy]')) {
+  b.addEventListener('click', async () => {
+    const inp = $('#' + b.dataset.copy);
+    const ok = await copyText(inp.value, inp);
+    const old = b.textContent; b.textContent = ok ? 'Gekopieerd' : 'Selecteer'; setTimeout(() => { b.textContent = old; }, 1600);
+  });
+}
+
+function fileBase(sel) {
+  const safe = s => String(s || '').normalize('NFKD').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40);
+  if (sel.length === 1) { const r = sel[0]; return `Declaratie_${r.project}_${r.date}_${safe(r.description || r.merchant)}`; }
+  return `Declaraties_${[...new Set(sel.map(r => r.project))].join('-')}_${todayStr()}`;
+}
+async function prepareAttachment(sel) {
+  const seq = ++attachSeq; attachment = null;
+  const box = $('#mAttach');
+  const clip = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>';
+  if (!sel.length) { box.innerHTML = ''; return; }
+  box.innerHTML = clip + '<span class="muted">Bijlage klaarmaken…</span>';
+  $('#sendShare').disabled = true;
+  try {
+    let blob, name;
+    if (sel.length === 1) { blob = await photoBlob(sel[0]); name = fileBase(sel) + '.jpg'; if (!blob) throw new Error('Foto niet gevonden'); }
+    else { blob = await buildPdf(sel); name = fileBase(sel) + '.pdf'; }
+    if (seq !== attachSeq) return;
+    attachment = { blob, name };
+    box.innerHTML = clip; box.append(el('span', { class: 'file', text: name }), el('span', { class: 'muted', style: 'margin-left:auto;flex:none', text: Math.max(1, Math.round(blob.size / 1024)) + ' kB' }));
+    $('#sendShare').disabled = false;
+  } catch (e) {
+    if (seq !== attachSeq) return;
+    console.error(e);
+    box.innerHTML = clip; box.append(el('span', { text: sel.length > 1 ? 'Pdf maken lukte niet. Declareer de bonnen los, dan gaat de foto mee.' : 'Foto van deze bon niet gevonden.' }));
+    $('#sendShare').disabled = true;
+  }
+}
+
+let jsPDFp = null;
+function loadJsPDF() {
+  if (window.jspdf) return Promise.resolve(window.jspdf.jsPDF);
+  if (!jsPDFp) jsPDFp = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = WEB ? VENDOR + 'jspdf.umd.min.js' : 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => window.jspdf ? res(window.jspdf.jsPDF) : rej(new Error('jspdf'));
+    s.onerror = () => { jsPDFp = null; rej(new Error('jspdf')); };
+    document.head.append(s);
+  });
+  return jsPDFp;
+}
+async function buildPdf(sel) {
+  const JsPDF = await loadJsPDF();
+  const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+  const pe = n => money(n).replace('€', 'EUR');
+  const W = 210, M = 18;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text('Declaratie', M, 26);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+  doc.text([settings.name || '', `Ingediend op ${fmtLong(todayStr())}`].filter(Boolean), M, 34);
+  let y = 52;
+  const cols = [M, M + 26, M + 52, W - M];
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text('Datum', cols[0], y); doc.text('Project', cols[1], y); doc.text('Omschrijving', cols[2], y); doc.text('Bedrag', cols[3], y, { align: 'right' });
+  doc.setDrawColor(200); doc.line(M, y + 2, W - M, y + 2); y += 8;
+  doc.setFont('helvetica', 'normal');
+  sel.forEach((r, i) => {
+    const desc = `${i + 1}. ${r.description || r.merchant}${r.merchant && r.description ? ' (' + r.merchant + ')' : ''}`;
+    const lines = doc.splitTextToSize(desc, cols[3] - cols[2] - 28);
+    doc.text(fmtNum(r.date), cols[0], y); doc.text(r.project, cols[1], y); doc.text(lines, cols[2], y); doc.text(pe(r.amount), cols[3], y, { align: 'right' });
+    y += 6 * lines.length + 1;
+    if (y > 270) { doc.addPage(); y = 24; }
+  });
+  doc.line(M, y - 3, W - M, y - 3);
+  doc.setFont('helvetica', 'bold'); doc.text('Totaal', cols[2], y + 3); doc.text(pe(sel.reduce((t, r) => t + r.amount, 0)), cols[3], y + 3, { align: 'right' });
+  if (settings.iban) { doc.setFont('helvetica', 'normal'); doc.text(`Graag overmaken naar ${settings.iban}${settings.name ? ' t.n.v. ' + settings.name : ''}.`, M, y + 14); }
+  for (let i = 0; i < sel.length; i++) {
+    const r = sel[i];
+    const b = await photoBlob(r);
+    doc.addPage();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.text(`Bon ${i + 1}: ${fmtNum(r.date)} · ${r.project} · ${r.description || r.merchant} · ${pe(r.amount)}`, M, 18, { maxWidth: W - 2 * M });
+    if (!b) { doc.setFont('helvetica', 'normal'); doc.text('Foto niet beschikbaar.', M, 30); continue; }
+    const jpg = b.type === 'image/jpeg' ? b : await compress(b, 2000, 0.85);
+    const url = await blobToDataURL(jpg);
+    const img = await loadImage(url);
+    const maxW = W - 2 * M, maxH = 297 - 30 - M;
+    const s = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    doc.addImage(url, 'JPEG', (W - w) / 2, 26, w, h);
+  }
+  return doc.output('blob');
+}
+
+$('#sendShare').addEventListener('click', async () => {
+  if (!attachment) return;
+  const body = $('#mBody').value;
+  // the share sheet carries the text itself; only Claude's save sheet needs it on the clipboard
+  const copied = caps.downloads ? copyText(body) : Promise.resolve(false); // start inside the tap, before any await
+  const { blob, name } = attachment;
+  let shared = false, why = '';
+  if (caps.downloads) {
+    try { await caps.downloads.save({ filename: name, data: blob }); shared = true; }
+    catch (e) { why = e && e.code; }
+  }
+  if (!shared && !caps.downloads && navigator.canShare) {
+    try {
+      const file = new File([blob], name, { type: blob.type || (name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg') });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: $('#mSubject').value, text: body }); shared = true; }
+    } catch (e) { why = e && e.name === 'AbortError' ? 'declined' : 'share'; }
+  }
+  const ok = await copied;
+  if (shared) {
+    if (caps.downloads) toast(ok ? 'Mailtekst gekopieerd. Plak hem in je mail.' : 'Bijlage gedeeld. Kopieer de mailtekst met de knoppen hierboven.');
+    $('#sendMain').hidden = true; $('#sendDone').hidden = false;
+  } else if (why === 'declined') {
+    toast('Niet gedeeld.');
+  } else {
+    toast('Delen lukt hier niet. Gebruik "Open mailconcept" en de kopieerknoppen.');
+  }
+});
+$('#sendMailto').addEventListener('click', () => {
+  setTimeout(() => { $('#sendMain').hidden = true; $('#sendDone').hidden = false; }, 800);
+});
+$('#sendNotYet').onclick = () => { $('#sendDone').hidden = true; $('#sendMain').hidden = false; };
+$('#sendMark').onclick = async () => {
+  const sel = selectedRecs(); const prev = sel.map(r => ({ ...r }));
+  const at = todayStr(), to = $('#mTo').value.trim();
+  try {
+    for (const r of sel) { r.status = 'sent'; r.sentAt = at; r.sentTo = to; await Store.put(r); }
+  } catch { toast('Opslaan lukte niet.'); return; }
+  closeSend(); renderHome();
+  toast(sel.length === 1 ? 'Bon staat bij Verstuurd' : `${sel.length} bonnen staan bij Verstuurd`, {
+    label: 'Ongedaan', run: async () => {
+      for (const p of prev) { const i = recs.findIndex(r => r.id === p.id); if (i >= 0) { recs[i] = p; await Store.put(p); } }
+      renderHome();
+    }
+  });
+};
+function closeSend() { $('#sendWrap').hidden = true; attachSeq++; }
+$('#sendClose').onclick = closeSend;
+$('#sendWrap').addEventListener('click', e => { if (e.target === $('#sendWrap')) closeSend(); });
+
+/* ================= settings ================= */
+function openSettings() {
+  $('#sName').value = settings.name; $('#sEmail').value = settings.adminEmail; $('#sIban').value = settings.iban;
+  $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
+  renderCalSrc(); renderIcsInfo();
+  $('#calResult').hidden = true;
+  $('#storageInfo').textContent = mode === 'cloud'
+    ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
+    : 'Bonnen en foto’s worden alleen op deze telefoon bewaard, in deze app. Verwijder je de app van je beginscherm, dan zijn ze weg; de verstuurde mails blijven je bewijs.';
+  show('settings');
+}
+function renderCalSrc() {
+  $('#calSrc [data-src=google]').hidden = !caps.mcp;
+  $('#calSrc [data-src=sync]').hidden = !WEB;
+  for (const b of document.querySelectorAll('#calSrc .cat')) b.setAttribute('aria-pressed', b.dataset.src === settings.calSource ? 'true' : 'false');
+  $('#calGoogle').hidden = settings.calSource !== 'google';
+  $('#calSync').hidden = settings.calSource !== 'sync';
+  $('#calIcs').hidden = settings.calSource !== 'ics';
+}
+$('#syncTest').onclick = async () => {
+  await persistSettings();
+  const out = $('#syncResult'); out.hidden = false; out.textContent = 'Agenda ophalen…';
+  try {
+    const d = await syncAgenda(true);
+    const codes = [...new Set(d.events.map(e => e.code))];
+    out.replaceChildren(el('div', { text: `Gelukt: ${d.events.length} afspraken met projectcode, bijgewerkt ${d.updated ? fmtLong(d.updated.slice(0, 10)) + ' ' + d.updated.slice(11, 16) : 'onbekend'}.` }),
+      codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : '');
+  } catch (e) { out.textContent = calErrorText(e); }
+};
+for (const b of document.querySelectorAll('#calSrc .cat')) b.onclick = () => { settings.calSource = b.dataset.src; renderCalSrc(); persistSettings(); };
+async function persistSettings() {
+  settings.name = $('#sName').value.trim();
+  settings.adminEmail = $('#sEmail').value.trim();
+  settings.iban = $('#sIban').value.trim().toUpperCase();
+  settings.calendarId = $('#sCalId').value.trim();
+  if ($('#sSyncPass').value !== settings.syncPass) { settings.syncPass = $('#sSyncPass').value; syncFetched = false; syncCache = null; }
+  settings.template = $('#sTpl').value.trim() ? $('#sTpl').value : DEFAULT_TEMPLATE;
+  try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }
+}
+for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sSyncPass', '#sTpl']) $(id).addEventListener('change', persistSettings);
+$('#setDone').onclick = async () => { await persistSettings(); show('home'); renderHome(); renderSetupCard(); };
+$('#openSettings').onclick = openSettings;
+$('#setupGo').onclick = openSettings;
+$('#tplReset').onclick = () => { $('#sTpl').value = DEFAULT_TEMPLATE; persistSettings(); toast('Standaardtekst hersteld'); };
+
+$('#calTest').onclick = async () => {
+  await persistSettings();
+  const out = $('#calResult'); out.hidden = false; out.replaceChildren(el('span', { class: 'spin', style: 'display:inline-block;vertical-align:-3px;margin-right:8px' }), 'Agenda van vandaag ophalen…');
+  try {
+    if (!caps.mcp) throw { code: 'no_mcp' };
+    const input = { startTime: todayStr() + 'T00:00:00', endTime: addDays(todayStr(), 1) + 'T00:00:00', pageSize: 100, orderBy: 'startTime' };
+    if (settings.calendarId) input.calendarId = settings.calendarId;
+    const res = await caps.mcp.callTool('Google Calendar', 'list_events', input, { cache: false });
+    let p = res.payload; if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = {}; } }
+    const evs = (p && (p.events || p.items)) || [];
+    const ul = el('ul');
+    for (const ev of evs.slice(0, 8)) {
+      const codes = findCodes([ev.summary, ev.description, ev.location].join(' '));
+      ul.append(el('li', {}, `${eventWhen(ev)} ${ev.summary || '(zonder titel)'} `, codes.length ? el('span', { class: 'chip code', text: codes.join(', ') }) : null));
+    }
+    const name = p && p.summary ? `“${p.summary}”` : 'je agenda';
+    out.replaceChildren(el('div', { text: evs.length ? `Verbonden met ${name}. Vandaag ${evs.length} afspraken:` : `Verbonden met ${name}. Vandaag geen afspraken.` }), evs.length ? ul : '');
+  } catch (e) { out.replaceChildren(calErrorText(e)); }
+};
+$('#calLoad').onclick = async () => {
+  const out = $('#calResult'); out.hidden = false; out.textContent = 'Agenda’s ophalen…';
+  try {
+    if (!caps.mcp) throw { code: 'no_mcp' };
+    const res = await caps.mcp.callTool('Google Calendar', 'list_calendars', {}, { cache: false });
+    let p = res.payload; if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = {}; } }
+    const cals = (p && (p.calendars || p.items)) || [];
+    const dl = $('#calList'); dl.replaceChildren();
+    const ul = el('ul');
+    for (const c of cals) {
+      const id = c.id || c.calendarId; if (!id) continue;
+      dl.append(el('option', { value: id, label: c.summary || id }));
+      ul.append(el('li', {}, el('button', { class: 'copy', style: 'margin:3px 0', onclick: () => { $('#sCalId').value = id; persistSettings(); toast('Agenda gekozen: ' + (c.summary || id)); }, text: c.summary || id })));
+    }
+    out.replaceChildren(cals.length ? el('div', { text: 'Tik op je werkagenda:' }) : el('div', { text: 'Geen agenda’s gevonden. Vul de agenda-ID zelf in (Google Agenda → Instellingen → Agenda integreren).' }), ul);
+  } catch (e) {
+    out.replaceChildren(e && e.code === 'tool_error'
+      ? 'De lijst met agenda’s is niet op te vragen. Vul de agenda-ID zelf in: Google Agenda op de computer → Instellingen → kies je werkagenda → Agenda integreren → Agenda-ID. Leeg laten = je hoofdagenda.'
+      : calErrorText(e));
+  }
+};
+
+/* ---------- ICS import ---------- */
+$('#icsPick').onclick = () => $('#icsInput').click();
+$('#icsInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const text = await f.text();
+    const events = window.DeclLib.parseIcs(text);
+    icsData = { events, importedAt: todayStr(), file: f.name };
+    await Store.saveIcs(icsData);
+    renderIcsInfo(); toast(`${events.length} afspraken met projectcode ingelezen`);
+  } catch (err) { console.error(err); toast('Dit bestand kon niet gelezen worden.'); }
+});
+function renderIcsInfo() {
+  const out = $('#icsResult');
+  if (!icsData) { out.hidden = true; return; }
+  out.hidden = false;
+  const codes = [...new Set(icsData.events.map(e => e.code))];
+  out.replaceChildren(el('div', { text: `${icsData.file || 'Agenda'} ingelezen op ${fmtLong(icsData.importedAt)}: ${icsData.events.length} afspraken, ${codes.length} projecten.` }),
+    codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : '');
+}
+/* ================= navigation ================= */
+function show(view) {
+  $('#editor').hidden = view !== 'editor';
+  $('#settings').hidden = view !== 'settings';
+  const homeVisible = view === 'home';
+  document.querySelector('.dock').hidden = !homeVisible;
+  if (view !== 'home') { const v = $('#' + view); v.scrollTop = 0; }
+}
+$('#tabOpen').onclick = () => { tab = 'open'; renderHome(); };
+$('#tabSent').onclick = () => { tab = 'sent'; renderHome(); };
+function renderSetupCard() { $('#setupCard').hidden = !!settings.name; }
+
+/* ================= boot ================= */
+async function boot() {
+  renderHome();
+  await Local.open();
+  const claude = window.claude;
+  const use = name => (claude && typeof claude.use === 'function') ? claude.use(name).catch(() => null) : Promise.resolve(null);
+  const [db, user, assets, sample, mcp, downloads] = await Promise.all(['db', 'user', 'assets', 'sample', 'mcp', 'downloads'].map(use));
+  caps.sample = sample; caps.mcp = mcp; caps.downloads = downloads;
+  if (sample && sample.limits) { try { const l = await sample.limits(); sampleImages = !!(l && l.images); } catch { sampleImages = false; } }
+  if (db) {
+    let id = null;
+    try { id = user && user.id ? await user.id() : null; } catch {}
+    Cloud.db = db; Cloud.assets = assets;
+    Cloud.base = id ? `data/users/${id}/main` : 'shared/main';
+    mode = 'cloud';
+  }
+  try {
+    settings = await Store.getSettings();
+    recs = await Store.list();
+    icsData = settings.calSource === 'ics' ? await Store.getIcs() : null;
+    if (!icsData) Store.getIcs().then(v => { icsData = v; }).catch(() => {});
+  } catch (e) {
+    console.error(e);
+    if (mode === 'cloud') {
+      mode = 'local';
+      settings = await Store.getSettings(); recs = await Store.list();
+      toast('Online opslag niet bereikbaar. Bonnen worden op dit apparaat bewaard.');
+    }
+  }
+  if (!caps.mcp && settings.calSource === 'google') settings.calSource = WEB ? 'ics' : 'none';
+  if (!WEB && settings.calSource === 'sync') settings.calSource = 'none';
+  if (WEB && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account' : (WEB ? 'Bewaard op deze telefoon' : 'Bewaard op dit apparaat');
+  renderHome(); renderSetupCard();
+}
+boot();
+})();
+</script>
