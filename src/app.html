@@ -394,7 +394,8 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       <div class="hint top">De app zoekt op de datum van de bon naar afspraken met een projectcode (4 letters + 4 cijfers, bijv. ABCD1234) in de titel, beschrijving of locatie.</div>
       <div class="radio-row" id="calSrc">
         <button class="cat" data-src="google" aria-pressed="true">Google</button>
-        <button class="cat" data-src="ics" aria-pressed="false">Outlook (.ics)</button>
+        <button class="cat" data-src="sync" aria-pressed="false" hidden>Automatisch</button>
+        <button class="cat" data-src="ics" aria-pressed="false">Bestand (.ics)</button>
         <button class="cat" data-src="none" aria-pressed="false">Geen</button>
       </div>
       <div id="calGoogle">
@@ -405,6 +406,12 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
           <button class="btn btn-plain" id="calLoad">Toon mijn agenda’s</button>
         </div>
         <div class="result" id="calResult" hidden></div>
+      </div>
+      <div id="calSync" hidden>
+        <div class="hint top">Je agenda wordt elk uur bijgewerkt via GitHub, versleuteld met je eigen wachtwoord. Eenmalig instellen: zie de handleiding in je GitHub-project.</div>
+        <div class="field"><label for="sSyncPass">Wachtwoord</label><input id="sSyncPass" type="password" autocomplete="off" placeholder="zelfde als AGENDA_PASSWORD"></div>
+        <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="syncTest">Agenda ophalen</button></div>
+        <div class="result" id="syncResult" hidden></div>
       </div>
       <div id="calIcs" hidden>
         <div class="hint top">Exporteer je werkagenda als .ics (Outlook: Agenda delen → Publiceren, of exporteren) en kies het bestand. Alleen afspraken met een projectcode worden bewaard.</div>
@@ -470,9 +477,12 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
 <div class="lightbox" id="lightbox" hidden><img id="lbImg" alt="Foto van de bon"><button class="icon-btn close" id="lbClose" aria-label="Sluit foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
 <div class="toast" id="toast" hidden role="status"></div>
 
+<script>/*@LIB@*/</script>
 <script>
 (() => {
 'use strict';
+const WEB = !!window.DECL_WEB;          // the free web app (own hosting, no Claude)
+const VENDOR = 'vendor/';
 
 /* ================= helpers ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -513,14 +523,9 @@ function parseAmount(v) {
   return isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 const amountInput = n => (typeof n === 'number' && isFinite(n)) ? n.toFixed(2).replace('.', ',') : '';
-const CODE_RE = /\b([A-Za-z]{4})[-_]?(\d{4})\b/g;
 const VALID_CODE = /^[A-Z]{4}\d{4}$/;
 const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-function findCodes(text) {
-  const out = []; let m; CODE_RE.lastIndex = 0;
-  while ((m = CODE_RE.exec(text || ''))) { const c = (m[1] + m[2]).toUpperCase(); if (!out.includes(c)) out.push(c); }
-  return out;
-}
+const { findCodes } = window.DeclLib;
 const CATS = ['Reiskosten', 'Parkeren', 'Maaltijd', 'Verblijf', 'Materiaal', 'Overig'];
 const DEFAULT_TEMPLATE = `Beste administratie,
 
@@ -536,7 +541,7 @@ Laat het gerust weten als er nog iets ontbreekt.
 Met vriendelijke groet,
 
 {naam}`;
-const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: 'google', calendarId: '', template: DEFAULT_TEMPLATE };
+const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', template: DEFAULT_TEMPLATE };
 
 let toastTimer;
 function toast(msg, action) {
@@ -818,7 +823,7 @@ async function openEditor(rec, isNew = false) {
 
   show('editor');
   renderRecentProjects();
-  if (!(isNew && caps.sample && sampleImages)) lookupProjects(); // a new scan looks up the agenda once the date is read
+  if (!(isNew && canReadReceipt())) lookupProjects(); // a new scan looks up the agenda once the date is read
 }
 
 function renderCats() {
@@ -853,8 +858,89 @@ inProject.addEventListener('input', () => {
 $('#edPhoto').onclick = () => { const s = $('#edPhoto').dataset.src; if (!s) return; $('#lbImg').src = s; $('#lightbox').hidden = false; };
 $('#lbClose').onclick = () => { $('#lightbox').hidden = true; };
 
+const SPARK = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7z"/></svg>';
+const canReadReceipt = () => (caps.sample && sampleImages) || WEB;
+function applyReading(r) {
+  const total = parseAmount(r.total);
+  if (total != null && !inAmount.value) { inAmount.value = amountInput(total); markAI('amount', true); }
+  if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) { inDate.value = r.date; editing.date = r.date; markAI('date', true); }
+  if (r.merchant && !inMerchant.value) { inMerchant.value = String(r.merchant).slice(0, 60); markAI('merchant', true); }
+  if (r.description && !inDesc.value) { inDesc.value = String(r.description).slice(0, 60); markAI('description', true); }
+  if (r.category && CATS.includes(r.category) && !editing.category) { editing.category = r.category; renderCats(); }
+  return [total == null && 'bedrag', !r.date && 'datum'].filter(Boolean);
+}
+
+/* on-device text recognition (web app): Tesseract, served with the app */
+let ocrWorkerP = null, ocrProgress = null;
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script ' + src)); document.head.append(s); });
+}
+function getOcr() {
+  if (!ocrWorkerP) ocrWorkerP = (async () => {
+    if (!window.Tesseract) await loadScript(VENDOR + 'tesseract.min.js');
+    return window.Tesseract.createWorker('nld', 1, {
+      workerPath: VENDOR + 'worker.min.js', corePath: VENDOR, langPath: VENDOR + 'lang', gzip: true,
+      logger: m => ocrProgress && ocrProgress(m),
+    });
+  })().catch(e => { ocrWorkerP = null; throw e; });
+  return ocrWorkerP;
+}
+async function ocrImage(blob) {
+  // grey, stretched contrast and at least ~1400px wide: clearly better results on thermal paper
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(2.2, Math.max(1, 1400 / img.naturalWidth));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+    const id = ctx.getImageData(0, 0, w, h), d = id.data, hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 4) { const g = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; d[i] = g; hist[g]++; }
+    const n = w * h; let lo = 0, hi = 255, acc = 0;
+    for (; lo < 255 && (acc += hist[lo]) < n * 0.02; lo++);
+    acc = 0; for (; hi > 0 && (acc += hist[hi]) < n * 0.02; hi--);
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < d.length; i += 4) { const v = Math.max(0, Math.min(255, (d[i] - lo) * 255 / span)); d[i] = d[i + 1] = d[i + 2] = v; }
+    ctx.putImageData(id, 0, 0);
+    const worker = await getOcr();
+    const { data } = await worker.recognize(c);
+    return data.text || '';
+  } finally { URL.revokeObjectURL(url); }
+}
+async function readReceiptOnDevice(recId) {
+  setStatus('ai', [el('span', { class: 'spin' }), el('span', { id: 'ocrMsg', text: 'Bon lezen op je telefoon…' })]);
+  ocrProgress = m => {
+    const t = $('#ocrMsg'); if (!t || !editing || editing.id !== recId) return;
+    if (/load|initializ/i.test(m.status)) t.textContent = 'Tekstherkenning klaarzetten… (de eerste keer even geduld)';
+    else if (m.status === 'recognizing text') t.textContent = `Bon lezen op je telefoon… ${Math.round((m.progress || 0) * 100)}%`;
+  };
+  try {
+    const text = await ocrImage(draftBlob);
+    if (!editing || editing.id !== recId) return;
+    const r = window.DeclLib.parseReceipt(text, todayStr());
+    if (r.total == null && !r.date) {
+      setStatus('err', [el('span', { text: 'Op deze foto is geen bedrag of datum gevonden. Vul de velden zelf in, of maak een foto recht van boven met goed licht.' })]);
+      return;
+    }
+    const missing = applyReading(r);
+    const unsure = r.total != null && !r.confident;
+    setStatus(missing.length || unsure ? 'err' : 'ai', [icon(SPARK), el('span', {
+      text: missing.length ? `Gelezen, maar ${missing.join(' en ')} niet gevonden. Vul dat zelf aan.`
+        : unsure ? 'Gelezen, maar het totaal stond niet duidelijk op de bon. Controleer vooral het bedrag.'
+        : 'Gelezen. Controleer de velden met ✦ en pas aan waar nodig.' })]);
+  } catch (e) {
+    console.error(e);
+    if (!editing || editing.id !== recId) return;
+    setStatus('err', [el('span', { text: 'Uitlezen lukte niet. Vul de velden zelf in.', style: 'flex:1' }), el('button', { class: 'copy', text: 'Opnieuw', onclick: readReceipt })]);
+  } finally {
+    ocrProgress = null;
+    if (editing && editing.id === recId) lookupProjects();
+  }
+}
+
 async function readReceipt() {
-  if (!caps.sample || !sampleImages) {
+  if (!(caps.sample && sampleImages)) {
+    if (WEB && draftBlob) return readReceiptOnDevice(editing.id);
     setStatus('info', [el('span', { text: 'Vul bedrag, datum en omschrijving in. Automatisch uitlezen is in deze weergave niet beschikbaar.' })]);
     setTimeout(() => inAmount.focus(), 300);
     return;
@@ -881,15 +967,9 @@ Regels:
       setStatus('err', [el('span', { text: 'De bon is niet goed leesbaar. Vul de velden zelf in of maak een scherpere foto.' })]);
       return;
     }
-    const total = parseAmount(r.total);
-    if (total != null && !inAmount.value) { inAmount.value = amountInput(total); markAI('amount', true); }
-    if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) { inDate.value = r.date; editing.date = r.date; markAI('date', true); }
-    if (r.merchant && !inMerchant.value) { inMerchant.value = String(r.merchant).slice(0, 60); markAI('merchant', true); }
-    if (r.description && !inDesc.value) { inDesc.value = String(r.description).slice(0, 60); markAI('description', true); }
-    if (r.category && CATS.includes(r.category) && !editing.category) { editing.category = r.category; renderCats(); }
-    const missing = [total == null && 'bedrag', !r.date && 'datum'].filter(Boolean);
+    const missing = applyReading(r);
     setStatus(missing.length ? 'err' : 'ai', [
-      icon('<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7z"/></svg>'),
+      icon(SPARK),
       el('span', { text: missing.length ? `Gelezen, maar ${missing.join(' en ')} niet gevonden. Vul dat zelf aan.` : 'Gelezen. Controleer de velden met ✦ en pas aan waar nodig.' })]);
   } catch (e) {
     if (e && e.code === 'cancelled') return;
@@ -969,6 +1049,10 @@ function eventWhen(ev) {
   return [t(s.dateTime), t(e.dateTime)].filter(Boolean).join('–');
 }
 async function agendaFor(date) {
+  if (settings.calSource === 'sync') {
+    const data = await syncAgenda(false);
+    return data.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
+  }
   if (settings.calSource === 'ics') {
     if (!icsData || !icsData.events) throw { code: 'no_ics' };
     return icsData.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
@@ -988,8 +1072,39 @@ async function agendaFor(date) {
   }
   return hits;
 }
+// agenda.enc is written by the GitHub workflow: {v, salt, iv, data}, AES-GCM with a key from the password.
+let syncCache = null, syncFetched = false;
+const b64 = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+async function decryptAgenda(file, pass) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(file.salt), iterations: file.iter || 210000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(file.iv) }, key, b64(file.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+async function syncAgenda(force) {
+  if (syncCache && (syncFetched || !navigator.onLine) && !force) return syncCache;
+  if (!settings.syncPass) throw { code: 'no_pass' };
+  if (!syncCache) syncCache = await Local.getKV('agendaSync');
+  try {
+    const res = await fetch('agenda.enc?t=' + Date.now(), { cache: 'no-store' });
+    if (res.status === 404) throw { code: 'no_sync_file' };
+    if (!res.ok) throw { code: 'sync_net' };
+    const file = await res.json();
+    let data;
+    try { data = await decryptAgenda(file, settings.syncPass); } catch { throw { code: 'bad_pass' }; }
+    syncCache = { events: data.events || [], updated: data.updated }; syncFetched = true;
+    Local.setKV('agendaSync', syncCache);
+  } catch (e) {
+    if (e && (e.code === 'bad_pass' || e.code === 'no_sync_file') || !syncCache) throw (e && e.code ? e : { code: 'sync_net' });
+  }
+  return syncCache;
+}
 function calErrorText(e) {
   const c = e && e.code;
+  if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in.';
+  if (c === 'bad_pass') return 'Het agenda-wachtwoord klopt niet. Controleer het in Instellingen.';
+  if (c === 'no_sync_file') return 'Er is nog geen agenda opgehaald. Het automatisch bijwerken is nog niet ingesteld of nog niet gedraaid.';
+  if (c === 'sync_net') return 'Agenda niet bereikbaar (geen internet?). Typ de code of kies een recent project.';
   if (c === 'no_ics') return 'Nog geen agendabestand ingelezen. Ga naar Instellingen → Werkagenda.';
   if (c === 'no_mcp') return 'De agenda is in deze weergave niet bereikbaar. Typ de projectcode of kies een recent project.';
   if (c === 'needs_reauth') return 'Google Agenda moet opnieuw gekoppeld worden: claude.ai → Instellingen → Connectors.';
@@ -1053,7 +1168,14 @@ let sendChecked = new Set();
 let attachment = null; // {blob, name}
 let attachSeq = 0;
 
+function renderSteps() {
+  const steps = caps.downloads
+    ? ['De mailtekst wordt gekopieerd en het deelmenu opent met de bijlage.', 'Kies <b>Mail</b>. Vul bij Aan het adres in.', 'Houd je vinger in het bericht en kies <b>Plak</b>. Verstuur.']
+    : ['Het deelmenu opent met de bijlage en de mailtekst.', 'Kies <b>Mail</b>. Vul bij Aan het adres in (na de eerste keer vult je iPhone het aan).', 'Controleer het onderwerp en verstuur.'];
+  $('#sendSteps').innerHTML = steps.map(t => `<li>${t}</li>`).join('');
+}
 function openSend(checkedIds, allIds) {
+  renderSteps();
   sendIds = allIds.slice();
   sendChecked = new Set(checkedIds);
   $('#mTo').value = settings.adminEmail || '';
@@ -1188,7 +1310,7 @@ function loadJsPDF() {
   if (window.jspdf) return Promise.resolve(window.jspdf.jsPDF);
   if (!jsPDFp) jsPDFp = new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.src = WEB ? VENDOR + 'jspdf.umd.min.js' : 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
     s.onload = () => window.jspdf ? res(window.jspdf.jsPDF) : rej(new Error('jspdf'));
     s.onerror = () => { jsPDFp = null; rej(new Error('jspdf')); };
     document.head.append(s);
@@ -1240,7 +1362,8 @@ async function buildPdf(sel) {
 $('#sendShare').addEventListener('click', async () => {
   if (!attachment) return;
   const body = $('#mBody').value;
-  const copied = copyText(body); // start inside the tap, before any await
+  // the share sheet carries the text itself; only Claude's save sheet needs it on the clipboard
+  const copied = caps.downloads ? copyText(body) : Promise.resolve(false); // start inside the tap, before any await
   const { blob, name } = attachment;
   let shared = false, why = '';
   if (caps.downloads) {
@@ -1255,7 +1378,7 @@ $('#sendShare').addEventListener('click', async () => {
   }
   const ok = await copied;
   if (shared) {
-    toast(ok ? 'Mailtekst gekopieerd. Plak hem in je mail.' : 'Bijlage gedeeld. Kopieer de mailtekst met de knoppen hierboven.');
+    if (caps.downloads) toast(ok ? 'Mailtekst gekopieerd. Plak hem in je mail.' : 'Bijlage gedeeld. Kopieer de mailtekst met de knoppen hierboven.');
     $('#sendMain').hidden = true; $('#sendDone').hidden = false;
   } else if (why === 'declined') {
     toast('Niet gedeeld.');
@@ -1288,29 +1411,43 @@ $('#sendWrap').addEventListener('click', e => { if (e.target === $('#sendWrap'))
 /* ================= settings ================= */
 function openSettings() {
   $('#sName').value = settings.name; $('#sEmail').value = settings.adminEmail; $('#sIban').value = settings.iban;
-  $('#sCalId').value = settings.calendarId; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
+  $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
   renderCalSrc(); renderIcsInfo();
   $('#calResult').hidden = true;
   $('#storageInfo').textContent = mode === 'cloud'
     ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
-    : 'Bonnen en foto’s worden alleen op dit apparaat bewaard, in deze browser.';
+    : 'Bonnen en foto’s worden alleen op deze telefoon bewaard, in deze app. Verwijder je de app van je beginscherm, dan zijn ze weg; de verstuurde mails blijven je bewijs.';
   show('settings');
 }
 function renderCalSrc() {
+  $('#calSrc [data-src=google]').hidden = !caps.mcp;
+  $('#calSrc [data-src=sync]').hidden = !WEB;
   for (const b of document.querySelectorAll('#calSrc .cat')) b.setAttribute('aria-pressed', b.dataset.src === settings.calSource ? 'true' : 'false');
   $('#calGoogle').hidden = settings.calSource !== 'google';
+  $('#calSync').hidden = settings.calSource !== 'sync';
   $('#calIcs').hidden = settings.calSource !== 'ics';
 }
+$('#syncTest').onclick = async () => {
+  await persistSettings();
+  const out = $('#syncResult'); out.hidden = false; out.textContent = 'Agenda ophalen…';
+  try {
+    const d = await syncAgenda(true);
+    const codes = [...new Set(d.events.map(e => e.code))];
+    out.replaceChildren(el('div', { text: `Gelukt: ${d.events.length} afspraken met projectcode, bijgewerkt ${d.updated ? fmtLong(d.updated.slice(0, 10)) + ' ' + d.updated.slice(11, 16) : 'onbekend'}.` }),
+      codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : '');
+  } catch (e) { out.textContent = calErrorText(e); }
+};
 for (const b of document.querySelectorAll('#calSrc .cat')) b.onclick = () => { settings.calSource = b.dataset.src; renderCalSrc(); persistSettings(); };
 async function persistSettings() {
   settings.name = $('#sName').value.trim();
   settings.adminEmail = $('#sEmail').value.trim();
   settings.iban = $('#sIban').value.trim().toUpperCase();
   settings.calendarId = $('#sCalId').value.trim();
+  if ($('#sSyncPass').value !== settings.syncPass) { settings.syncPass = $('#sSyncPass').value; syncFetched = false; syncCache = null; }
   settings.template = $('#sTpl').value.trim() ? $('#sTpl').value : DEFAULT_TEMPLATE;
   try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }
 }
-for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sTpl']) $(id).addEventListener('change', persistSettings);
+for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sSyncPass', '#sTpl']) $(id).addEventListener('change', persistSettings);
 $('#setDone').onclick = async () => { await persistSettings(); show('home'); renderHome(); renderSetupCard(); };
 $('#openSettings').onclick = openSettings;
 $('#setupGo').onclick = openSettings;
@@ -1363,7 +1500,7 @@ $('#icsInput').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
     const text = await f.text();
-    const events = parseIcs(text);
+    const events = window.DeclLib.parseIcs(text);
     icsData = { events, importedAt: todayStr(), file: f.name };
     await Store.saveIcs(icsData);
     renderIcsInfo(); toast(`${events.length} afspraken met projectcode ingelezen`);
@@ -1377,35 +1514,6 @@ function renderIcsInfo() {
   out.replaceChildren(el('div', { text: `${icsData.file || 'Agenda'} ingelezen op ${fmtLong(icsData.importedAt)}: ${icsData.events.length} afspraken, ${codes.length} projecten.` }),
     codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : '');
 }
-function parseIcs(text) {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n');
-  const out = []; let ev = null;
-  const unesc = s => s.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1');
-  const toDate = v => { const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/.exec(v || ''); return m ? { d: `${m[1]}-${m[2]}-${m[3]}`, t: m[4] ? `${m[4]}:${m[5]}` : '', utc: /Z$/.test(v), allDay: !m[4] } : null; };
-  const localize = x => { if (!x || !x.utc || !x.t) return x; const dt = new Date(Date.UTC(+x.d.slice(0, 4), +x.d.slice(5, 7) - 1, +x.d.slice(8, 10), +x.t.slice(0, 2), +x.t.slice(3, 5))); return { d: ymd(dt), t: `${pad(dt.getHours())}:${pad(dt.getMinutes())}`, allDay: false }; };
-  for (const raw of lines) {
-    if (raw === 'BEGIN:VEVENT') { ev = {}; continue; }
-    if (raw === 'END:VEVENT') {
-      if (ev) {
-        const codes = findCodes([ev.SUMMARY, ev.DESCRIPTION, ev.LOCATION].join(' '));
-        const s = localize(toDate(ev.DTSTART)); let e = localize(toDate(ev.DTEND)) || s;
-        if (s && codes.length) {
-          let end = e ? e.d : s.d;
-          if (e && e.allDay && end > s.d) end = addDays(end, -1);
-          for (const code of codes) out.push({ s: s.d, e: end, code, t: (ev.SUMMARY || '').slice(0, 120), time: s.allDay ? 'hele dag' : [s.t, e && e.t].filter(Boolean).join('–') });
-        }
-      }
-      ev = null; continue;
-    }
-    if (!ev) continue;
-    const i = raw.indexOf(':'); if (i < 0) continue;
-    const key = raw.slice(0, i).split(';')[0].toUpperCase();
-    if (['SUMMARY', 'DESCRIPTION', 'LOCATION', 'DTSTART', 'DTEND'].includes(key)) ev[key] = unesc(raw.slice(i + 1));
-  }
-  const cutoff = addDays(todayStr(), -800);
-  return out.filter(e => e.e >= cutoff).slice(-3000);
-}
-
 /* ================= navigation ================= */
 function show(view) {
   $('#editor').hidden = view !== 'editor';
@@ -1447,7 +1555,10 @@ async function boot() {
       toast('Online opslag niet bereikbaar. Bonnen worden op dit apparaat bewaard.');
     }
   }
-  $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account' : 'Bewaard op dit apparaat';
+  if (!caps.mcp && settings.calSource === 'google') settings.calSource = WEB ? 'ics' : 'none';
+  if (!WEB && settings.calSource === 'sync') settings.calSource = 'none';
+  if (WEB && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account' : (WEB ? 'Bewaard op deze telefoon' : 'Bewaard op dit apparaat');
   renderHome(); renderSetupCard();
 }
 boot();

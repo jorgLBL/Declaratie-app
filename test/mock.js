@@ -50,7 +50,7 @@
       await new Promise(r => setTimeout(r, 200));
       if (opts.calError) throw { code: opts.calError, message: 'mock' };
       if (tool === 'list_events') { const d = input.startTime.slice(0, 10); return { content: [], payload: { summary: 'Werk', events: events[d] || [] } }; }
-      if (tool === 'list_calendars') return { content: [], payload: { calendars: [{ id: 'werk@group.calendar.google.com', summary: 'Werk' }, { id: 'primary', summary: 'Jorg Prive' }] } };
+      if (tool === 'list_calendars') return { content: [], payload: { calendars: [{ id: 'werk@group.calendar.google.com', summary: 'Werk' }, { id: 'primary', summary: 'Prive' }] } };
     },
   };
   const assets = { upload: async (b) => ({ id: 'a' + Math.random().toString(16).slice(2, 10).padEnd(8, '0'), url: URL.createObjectURL(b), sizeBytes: b.size }), delete: async () => ({ deleted: true }) };

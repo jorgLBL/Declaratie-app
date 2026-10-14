@@ -8,7 +8,7 @@ const http = require('http');
 const here = __dirname;
 const out = process.argv[2] || path.join(here, 'out');
 fs.mkdirSync(out, { recursive: true });
-const app = fs.readFileSync(path.join(here, '../app/declaratie-app.html'), 'utf8');
+const app = fs.readFileSync(path.join(here, '../dist/artifact.html'), 'utf8');
 const mock = fs.readFileSync(path.join(here, 'mock.js'), 'utf8');
 const html = `<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style><script>${mock}</script></head><body>${app}</body></html>`;
 
@@ -50,7 +50,7 @@ const ok = (cond, name) => { if (cond) { pass++; console.log('  ✓ ' + name); }
     ok(await visible(page, '#setupCard'), 'instelkaart zichtbaar zonder naam');
     ok((await text(page, '#storageNote')).includes('Claude-account'), 'opslag in Claude-account');
     await page.click('#setupGo');
-    await page.fill('#sName', 'Jorg van Gerner');
+    await page.fill('#sName', 'Sanne de Vries');
     await page.fill('#sEmail', 'administratie@bedrijf.nl');
     await page.fill('#sIban', 'nl91abna0417164300');
     await page.click('#setDone');
@@ -81,8 +81,8 @@ const ok = (cond, name) => { if (cond) { pass++; console.log('  ✓ ' + name); }
     ok(await val(page, '#mSubject') === 'Declaratie KLMN2041 – Lunch met klant – € 23,50', 'onderwerp klopt');
     const body = await val(page, '#mBody');
     ok(body.includes('Project: KLMN2041') && body.includes('Datum: 8 oktober 2026') && body.includes('Bedrag: € 23,50'), 'mail bevat project, datum, bedrag');
-    ok(body.includes('NL91ABNA0417164300 t.n.v. Jorg van Gerner'), 'IBAN in hoofdletters en naam in mail');
-    ok(body.trim().endsWith('Jorg van Gerner'), 'mail eindigt met naam');
+    ok(body.includes('NL91ABNA0417164300 t.n.v. Sanne de Vries'), 'IBAN in hoofdletters en naam in mail');
+    ok(body.trim().endsWith('Sanne de Vries'), 'mail eindigt met naam');
     ok((await page.getAttribute('#sendMailto', 'href')).startsWith('mailto:administratie@bedrijf.nl?subject=Declaratie%20KLMN2041'), 'mailto-link klopt');
     await page.click('#sendShare'); await page.waitForTimeout(300);
     const saved = await page.evaluate(() => window.__saved);
@@ -144,7 +144,7 @@ const ok = (cond, name) => { if (cond) { pass++; console.log('  ✓ ' + name); }
   console.log('C. Meerdere bonnen in één declaratie (pdf)');
   {
     const { page, ctx } = await newPage();
-    await page.click('#setupGo'); await page.fill('#sName', 'Jorg'); await page.click('#setDone');
+    await page.click('#setupGo'); await page.fill('#sName', 'Sanne'); await page.click('#setDone');
     for (const a of [
       { total: 23.5, date: '2026-10-08', merchant: 'Bagels & Beans', description: 'Lunch', category: 'Maaltijd', readable: true },
       { total: 12.75, date: '2026-10-08', merchant: 'NS', description: 'Treinkaartje', category: 'Reiskosten', readable: true },

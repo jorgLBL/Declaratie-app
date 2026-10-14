@@ -1,0 +1,59 @@
+name: Web-app publiceren
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 * * * *'   # elk uur de agenda bijwerken (alleen als die is ingesteld)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    env:
+      AGENDA_ICS_URL: ${{ secrets.AGENDA_ICS_URL }}
+      AGENDA_PASSWORD: ${{ secrets.AGENDA_PASSWORD }}
+      TZ: Europe/Amsterdam
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$AGENDA_ICS_URL" ]; then echo "go=false" >> "$GITHUB_OUTPUT"; else echo "go=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - if: steps.check.outputs.go == 'true'
+        run: node tools/build.mjs
+      - name: Agenda bijwerken
+        if: steps.check.outputs.go == 'true' && env.AGENDA_ICS_URL != '' && env.AGENDA_PASSWORD != ''
+        run: node tools/agenda-sync.mjs site/agenda.enc
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
