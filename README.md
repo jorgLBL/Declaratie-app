@@ -3,7 +3,7 @@
 Maak een foto van een bon. De app leest bedrag, datum, winkel en omschrijving uit en zoekt in je werkagenda het project (4 letters + 4 cijfers, bijv. `ABCD1234`). Daarna verstuur je de declaratie naar de administratie, met de foto als bijlage.
 
 - `app/declaratie-app.html`: de app (draait als Claude-artifact, ook op de iPhone in de Claude-app).
-- `test/`: lokale test met een nagebootste omgeving (`node test/run.cjs <map> light|dark`, met Playwright).
+- `test/e2e.cjs`: 72 geautomatiseerde checks in een nagebootste omgeving (camera-upload, uitlezen, agenda, .ics, mail, pdf, opslag, smalle schermen). Draai met `NODE_PATH=$(npm root -g) node test/e2e.cjs`; zet `JSPDF=<pad naar jspdf.umd.min.js>` om ook de pdf te testen.
 
 ## Gebruik
 
