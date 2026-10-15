@@ -14,12 +14,12 @@ Maak een foto van een bon. De app leest bedrag en datum uit, zoekt in je werkage
 
 ## Google-werkaccount koppelen (eenmalig, op een computer)
 
-Een klein script in je werkaccount zet de mails klaar in Gmail, met je werkadres als afzender, en geeft de app je werkagenda door.
+Een klein script in je werkaccount zet de mails klaar in Gmail, met je werkadres als afzender, geeft de app je werkagenda door en bewaart je bonnen in je Google Drive (map **Declaratie-app**). Zo zie je op iPhone en computer dezelfde bonnen.
 
 1. Ga naar **script.google.com**, ingelogd met je werkaccount → **Nieuw project**.
 2. Vervang de voorbeeldcode door de inhoud van [`tools/apps-script/Code.gs`](tools/apps-script/Code.gs) → **Opslaan**.
 3. Klik links naast **Services** op **+** → **Google Calendar API** → **Toevoegen**.
-4. Kies bovenin de functie **test** → **Uitvoeren** → sta toegang tot agenda en Gmail toe. Het logboek toont na enkele seconden hoeveel afspraken met projectcode er zijn gevonden.
+4. Kies bovenin de functie **test** → **Uitvoeren** → sta toegang tot agenda, Gmail en Drive toe. Het logboek toont na enkele seconden hoeveel afspraken met projectcode er zijn gevonden.
 5. **Implementeren → Nieuwe implementatie** → tandwiel → **Web-app**. Kies:
    - Uitvoeren als: **Ik**
    - Wie heeft toegang: **Iedereen**
@@ -27,14 +27,15 @@ Een klein script in je werkaccount zet de mails klaar in Gmail, met je werkadres
    Klik daarna op **Implementeren** en kopieer de URL van de web-app.
 6. Open die URL in je browser. Je ziet je **koppeling**. Stuur die naar je iPhone, bijvoorbeeld via Notities, en deel hem met niemand anders.
 7. In de app: **Instellingen → Google-werkaccount** → plak de koppeling → **Test koppeling**. Kies bij **Werkagenda** voor **Google (werk)**.
+8. Op je computer: open https://jorglbl.github.io/Declaratie-app/ en plak dezelfde koppeling bij **Instellingen → Google-werkaccount**. Je bonnen verschijnen vanzelf. Vul daar ook je naam en het adres van de administratie in.
 
 **Blijft "Uitvoering gestart" geel staan?** Dan wacht Google op je toestemming. Zoek het venster **Autorisatie vereist**: het kan achter je browser staan of als pop-up geblokkeerd zijn. Kies daar **Geavanceerd → Ga naar … (onveilig) → Toestaan**. Er staat "onveilig" omdat het je eigen script is.
 
-**Staat "Iedereen" er niet?** Kies dan **Alleen ikzelf**. De app verstuurt dan via het deelmenu in plaats van Gmail. Voor je agenda kopieer je de **agenda-code** van de pagina uit stap 6 naar Werkagenda → Google (werk). Herhaal dat af en toe.
+**Staat "Iedereen" er niet?** Kies dan **Alleen ikzelf**. De app verstuurt dan via het deelmenu in plaats van Gmail, en je bonnen blijven alleen op het apparaat zelf. Voor je agenda kopieer je de **agenda-code** van de pagina uit stap 6 naar Werkagenda → Google (werk). Herhaal dat af en toe.
 
-**Script bijwerken:** plak de nieuwe code en sla op. Ga dan naar **Implementeren → Implementaties beheren** → potlood → Versie: **Nieuwe versie** → **Implementeren**. De koppeling blijft hetzelfde.
+**Script bijwerken:** plak de nieuwe code en sla op. Voer **test** uit en sta eventuele nieuwe toegang toe (bijvoorbeeld Drive). Ga dan naar **Implementeren → Implementaties beheren** → potlood → Versie: **Nieuwe versie** → **Implementeren**. De koppeling blijft hetzelfde.
 
-Het script maakt alleen concepten. Versturen doe je altijd zelf. Van je agenda geeft het alleen afspraken met een projectcode door. Is je koppeling uitgelekt? Verwijder in het script bij **Projectinstellingen → Scripteigenschappen** de eigenschap `KEY`. De pagina uit stap 6 geeft dan een nieuwe koppeling.
+Het script maakt alleen concepten. Versturen doe je altijd zelf. Van je agenda geeft het alleen afspraken met een projectcode door. Wijzig je dezelfde bon tegelijk op twee apparaten, dan wint de laatste wijziging. Zonder internet werkt de app gewoon; wijzigingen gaan mee zodra je weer online bent. Is je koppeling uitgelekt? Verwijder in het script bij **Projectinstellingen → Scripteigenschappen** de eigenschap `KEY`. De pagina uit stap 6 geeft dan een nieuwe koppeling.
 
 ## Wachtwoord op de app
 
@@ -54,7 +55,7 @@ Op je iPhone vul je het wachtwoord één keer in, met **Onthoud op deze iPhone**
 
 - `src/app.html`, `src/lib.js`: de app en de gedeelde regels (projectcodes, agenda, bon-tekst).
 - `tools/build.mjs`: bouwt `site/` (web-app) en `dist/artifact.html` (Claude-versie).
-- `tools/apps-script/Code.gs`: script voor het Google-werkaccount.
+- `tools/apps-script/Code.gs`: script voor het Google-werkaccount (Gmail-concepten, werkagenda, bonnen in Drive).
 - `tools/agenda-sync.mjs`: haalt en versleutelt de iCal-agenda (GitHub Actions).
 - `web/`: icoon, manifest, offline-ondersteuning en meegeleverde bibliotheken (zie `web/vendor/LICENSES.md`).
 - Tests: `node test/lib.test.cjs` en `node test/apps-script.test.cjs`. Na `node tools/build.mjs` met Playwright: `node test/web.e2e.cjs` en `node test/e2e.cjs`.

@@ -19,10 +19,38 @@ const RAW = [
   { title: 'Geannuleerd ZZZZ9999', start: '2026-10-09T08:00:00+02:00', end: '2026-10-09T09:00:00+02:00', cancelled: true },
 ];
 
+// a small Google Drive: folders with files (text or bytes), trash, lookup by name
+function driveStub(d) {
+  let n = 0;
+  const iter = list => { let i = 0; return { hasNext: () => i < list.length, next: () => list[i++] }; };
+  const fileObj = f => ({
+    getId: () => f.id, getName: () => f.name,
+    getBlob: () => ({ getDataAsString: () => Buffer.from(f.bytes).toString('utf8'), getBytes: () => [...f.bytes], getContentType: () => f.type }),
+    setContent: c => { if (d.failWrites) throw new Error('Drive is niet toegestaan'); f.bytes = Buffer.from(c, 'utf8'); },
+    setTrashed: t => { f.trashed = t; },
+  });
+  const folderObj = fo => ({
+    getId: () => fo.id, isTrashed: () => !!fo.trashed,
+    getFilesByName: name => iter(d.files.filter(f => f.folder === fo.id && f.name === name && !f.trashed).map(fileObj)),
+    createFile: (a, content, type) => {
+      if (d.failWrites) throw new Error('Drive is niet toegestaan');
+      const f = typeof a === 'string'
+        ? { id: 'f' + ++n, folder: fo.id, name: a, type, bytes: Buffer.from(content, 'utf8') }
+        : { id: 'f' + ++n, folder: fo.id, name: a.name, type: a.type, bytes: Buffer.from(a.bytes) };
+      d.files.push(f);
+      return fileObj(f);
+    },
+  });
+  return {
+    createFolder: name => { const fo = { id: 'd' + ++n, name }; d.folders.push(fo); return folderObj(fo); },
+    getFolderById: id => { const fo = d.folders.find(x => x.id === id); if (!fo) throw new Error('niet gevonden'); return folderObj(fo); },
+  };
+}
+
 function run(viewer, opts = {}) {
   const props = {};
   const cache = {};
-  const out = { drafts: [], calls: 0, apiCalls: 0, logs: [] };
+  const out = { drafts: [], calls: 0, apiCalls: 0, logs: [], drive: { folders: [], files: [] } };
   const counted = fn => (...a) => { out.calls++; return fn(...a); };
   const appEvents = () => RAW.filter(r => !r.cancelled).map(r => ({
     getTitle: counted(() => r.title), getDescription: counted(() => r.desc || ''), getLocation: counted(() => ''),
@@ -43,7 +71,7 @@ function run(viewer, opts = {}) {
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; } }) },
     Utilities: {
       getUuid: () => require('crypto').randomUUID(), formatDate, Charset: { UTF_8: 'UTF-8' },
-      base64Encode: s => Buffer.from(s, 'utf8').toString('base64'),
+      base64Encode: v => (typeof v === 'string' ? Buffer.from(v, 'utf8') : Buffer.from(v)).toString('base64'),
       base64Decode: s => [...Buffer.from(s, 'base64')],
       newBlob: (bytes, type, name) => ({ bytes, type, name }),
     },
@@ -61,6 +89,9 @@ function run(viewer, opts = {}) {
     HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/ABC/exec' }) },
     Logger: { log: m => { out.logs.push(m); out.log = m; } },
+    MimeType: { PLAIN_TEXT: 'text/plain' },
+    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    DriveApp: driveStub(out.drive),
   };
   if (opts.api) {
     ctx.Calendar = {
