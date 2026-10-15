@@ -1506,8 +1506,8 @@ async function sendViaGmail() {
     let res;
     try { res = await fetch(settings.gasUrl, { method: 'POST', body: JSON.stringify(payload), credentials: 'omit' }); }
     catch { throw { msg: navigator.onLine ? 'Het script is niet bereikbaar of vraagt om inloggen. Controleer of de nieuwste versie is geïmplementeerd met toegang “Iedereen”.' : 'Geen internet. Probeer het opnieuw als je verbinding hebt.' }; }
-    let r; try { r = await res.json(); } catch { throw { msg: 'Het script gaf geen antwoord. Heeft het al toestemming voor Gmail? Zie de handleiding: “Gmail toestaan”.' }; }
-    if (!r.ok) throw { msg: GMAIL_ERRORS[r.error] || ('Gmail weigerde het concept' + (r.message ? ': ' + r.message : '') + '. Zie de handleiding: “Gmail toestaan”.') };
+    let r; try { r = await res.json(); } catch { throw { msg: 'Het script gaf geen antwoord. Voer in het script de functie test uit en sta Gmail toe.' }; }
+    if (!r.ok) throw { msg: GMAIL_ERRORS[r.error] || ('Gmail weigerde het concept' + (r.message ? ': ' + r.message : '') + '. Voer in het script de functie test uit en sta Gmail toe.') };
     if (r.account && r.account !== settings.gasAccount) { settings.gasAccount = r.account; persistSettings(); renderSteps(); }
     if (to !== settings.adminEmail) { settings.adminEmail = to; persistSettings(); }
     $('#gmailDoneText').replaceChildren(el('b', { text: 'De e-mail staat klaar in Gmail' }), `${r.account ? ' van ' + r.account : ''}, bij Concepten. Open hem, controleer en verstuur.`);

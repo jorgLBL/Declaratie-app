@@ -1,4 +1,5 @@
 // Unit checks for src/lib.js (codes, .ics, receipt text). Run: node test/lib.test.cjs
+process.env.TZ = 'Europe/Amsterdam'; // de verwachte tijden hieronder zijn Nederlandse tijd
 const L = require('../src/lib.js');
 let pass = 0, fail = 0;
 const eq = (a, b, name) => { const ok = JSON.stringify(a) === JSON.stringify(b); ok ? pass++ : fail++; console.log((ok ? '  ✓ ' : '  ✗ ') + name + (ok ? '' : `\n      kreeg ${JSON.stringify(a)}\n      verwacht ${JSON.stringify(b)}`)); };
