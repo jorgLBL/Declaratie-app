@@ -19,6 +19,16 @@ Er zijn twee versies uit dezelfde code:
 3. Zet de code op `main` (merge deze branch). GitHub bouwt de app; na een paar minuten staat hij op `https://jorglbl.github.io/Declaratie-app/`.
 4. Open die link in **Safari** op je iPhone → deelknop → **Zet op beginscherm**.
 
+### Wachtwoord op de app
+
+Zonder wachtwoord kan iedereen met de link de app openen. Je bonnen zien ze dan niet (die staan alleen op jouw telefoon), maar ze kunnen de app wel gebruiken. Zo zet je er een wachtwoord op:
+
+1. GitHub → **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name: `APP_PASSWORD`, Secret: een wachtwoord dat je zelf kiest. Kies er een van minstens 12 tekens.
+3. **Actions → Web-app publiceren → Run workflow**. Na een paar minuten vraagt de app om het wachtwoord.
+
+Op je iPhone vul je het één keer in; met **Onthoud op deze iPhone** blijft de app daarna open. Via Instellingen → Beveiliging vergrendel je hem weer. Het wachtwoord zelf staat nergens in de app of op GitHub zichtbaar, alleen een versleutelde vingerafdruk ervan. Wijzigen gaat door het geheim aan te passen en de workflow opnieuw te draaien.
+
 ### Agenda automatisch laten bijwerken (optioneel)
 
 GitHub haalt dan elk uur je werkagenda op, bewaart alleen afspraken met een projectcode en versleutelt die met jouw wachtwoord.
@@ -28,8 +38,8 @@ GitHub haalt dan elk uur je werkagenda op, bewaart alleen afspraken met een proj
    - Outlook (web): Instellingen → Agenda → Gedeelde agenda's → **Een agenda publiceren** → ICS-link.
 2. GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
    - `AGENDA_ICS_URL`: de link uit stap 1
-   - `AGENDA_PASSWORD`: een wachtwoord dat je zelf kiest
-3. In de app: Instellingen → Werkagenda → **Automatisch** → vul hetzelfde wachtwoord in → **Agenda ophalen**.
+   - De agenda wordt versleuteld met je `APP_PASSWORD` (zie hierboven). Wil je een apart agenda-wachtwoord, voeg dan ook `AGENDA_PASSWORD` toe.
+3. In de app: Instellingen → Werkagenda → **Automatisch** → **Agenda ophalen**. Het wachtwoordveld laat je leeg, tenzij je een apart agenda-wachtwoord hebt.
 
 Zonder deze stap kun je in de app ook een .ics-bestand inlezen (Instellingen → Werkagenda → Bestand).
 GitHub zet het elk uur bijwerken uit als er 60 dagen niets aan het project verandert; je krijgt dan een mail met een knop om het weer aan te zetten.

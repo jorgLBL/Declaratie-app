@@ -282,6 +282,25 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
 .result { margin: 0 14px 14px; font-size: 14px; border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
 .result ul { margin: 6px 0 0; padding-left: 18px; }
 
+/* ---------- Lock ---------- */
+.lock {
+  position: fixed; inset: 0; z-index: 100; background: var(--bg); overflow-y: auto;
+  padding: calc(48px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.lock form { max-width: 360px; margin: 0 auto; display: grid; gap: 14px; justify-items: stretch; text-align: center; }
+.lock .mark { width: 72px; height: 72px; border-radius: 18px; background: var(--accent); justify-self: center; display: grid; place-items: center; box-shadow: var(--shadow); }
+.lock .mark svg { width: 38px; height: 38px; color: var(--accent-ink); }
+.lock h1 { font-family: var(--f-display); font-size: 30px; letter-spacing: -.02em; margin: 6px 0 0; }
+.lock p { margin: 0; color: var(--muted); font-size: 15px; }
+.lock input[type="password"] {
+  width: 100%; min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface);
+  padding: 0 14px; font-size: 17px; text-align: center;
+}
+.lock input[type="password"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lock .remember { display: flex; gap: 10px; align-items: center; justify-content: center; font-size: 15px; color: var(--muted); }
+.lock .remember input { width: 20px; height: 20px; accent-color: var(--accent); }
+.lock .err { color: var(--danger); font-size: 15px; min-height: 1.4em; }
+
 @media (prefers-reduced-motion: reduce) {
   .sheet { animation: none; } .spin { animation-duration: 2.4s; }
 }
@@ -409,7 +428,7 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       </div>
       <div id="calSync" hidden>
         <div class="hint top">Je agenda wordt elk uur bijgewerkt via GitHub, versleuteld met je eigen wachtwoord. Eenmalig instellen: zie de handleiding in je GitHub-project.</div>
-        <div class="field"><label for="sSyncPass">Wachtwoord</label><input id="sSyncPass" type="password" autocomplete="off" placeholder="zelfde als AGENDA_PASSWORD"></div>
+        <div class="field"><label for="sSyncPass">Wachtwoord</label><input id="sSyncPass" type="password" autocomplete="off" placeholder="leeg = app-wachtwoord"></div>
         <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="syncTest">Agenda ophalen</button></div>
         <div class="result" id="syncResult" hidden></div>
       </div>
@@ -427,6 +446,9 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       <div class="ph"><code>{overzicht}</code><code>{totaal}</code><code>{naam}</code><code>{iban}</code><code>{aantal}</code><code>{bijlage}</code></div>
       <div class="small-btns"><button class="btn btn-plain" id="tplReset">Standaardtekst herstellen</button></div>
     </div>
+
+    <div class="group-title" id="secTitle" hidden>Beveiliging</div>
+    <div class="group" id="secBox" hidden></div>
 
     <div class="group-title">Opslag</div>
     <div class="group"><div class="hint top" id="storageInfo"></div></div>
@@ -473,6 +495,19 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
 </div>
 
 <!-- Settings quick (onboarding) uses the settings view -->
+
+<section class="lock" id="lock" hidden aria-label="Vergrendeld">
+  <form id="lockForm" autocomplete="on">
+    <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></div>
+    <h1>Declaraties</h1>
+    <p>Vul het wachtwoord van de app in.</p>
+    <input type="text" name="username" value="declaraties" autocomplete="username" hidden>
+    <input type="password" id="lockPass" name="password" autocomplete="current-password" placeholder="Wachtwoord" aria-label="Wachtwoord" required>
+    <label class="remember"><input type="checkbox" id="lockRemember" checked> Onthoud op deze iPhone</label>
+    <button class="btn btn-primary btn-block" id="lockGo" type="submit">Ontgrendel</button>
+    <div class="err" id="lockErr" role="alert"></div>
+  </form>
+</section>
 
 <div class="lightbox" id="lightbox" hidden><img id="lbImg" alt="Foto van de bon"><button class="icon-btn close" id="lbClose" aria-label="Sluit foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
 <div class="toast" id="toast" hidden role="status"></div>
@@ -1083,7 +1118,8 @@ async function decryptAgenda(file, pass) {
 }
 async function syncAgenda(force) {
   if (syncCache && (syncFetched || !navigator.onLine) && !force) return syncCache;
-  if (!settings.syncPass) throw { code: 'no_pass' };
+  const pass = settings.syncPass || appPass;
+  if (!pass) throw { code: 'no_pass' };
   if (!syncCache) syncCache = await Local.getKV('agendaSync');
   try {
     const res = await fetch('agenda.enc?t=' + Date.now(), { cache: 'no-store' });
@@ -1091,7 +1127,7 @@ async function syncAgenda(force) {
     if (!res.ok) throw { code: 'sync_net' };
     const file = await res.json();
     let data;
-    try { data = await decryptAgenda(file, settings.syncPass); } catch { throw { code: 'bad_pass' }; }
+    try { data = await decryptAgenda(file, pass); } catch { throw { code: 'bad_pass' }; }
     syncCache = { events: data.events || [], updated: data.updated }; syncFetched = true;
     Local.setKV('agendaSync', syncCache);
   } catch (e) {
@@ -1101,7 +1137,7 @@ async function syncAgenda(force) {
 }
 function calErrorText(e) {
   const c = e && e.code;
-  if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in.';
+  if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in, of stel een app-wachtwoord in.';
   if (c === 'bad_pass') return 'Het agenda-wachtwoord klopt niet. Controleer het in Instellingen.';
   if (c === 'no_sync_file') return 'Er is nog geen agenda opgehaald. Het automatisch bijwerken is nog niet ingesteld of nog niet gedraaid.';
   if (c === 'sync_net') return 'Agenda niet bereikbaar (geen internet?). Typ de code of kies een recent project.';
@@ -1412,7 +1448,7 @@ $('#sendWrap').addEventListener('click', e => { if (e.target === $('#sendWrap'))
 function openSettings() {
   $('#sName').value = settings.name; $('#sEmail').value = settings.adminEmail; $('#sIban').value = settings.iban;
   $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
-  renderCalSrc(); renderIcsInfo();
+  renderCalSrc(); renderIcsInfo(); renderSecurity();
   $('#calResult').hidden = true;
   $('#storageInfo').textContent = mode === 'cloud'
     ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
@@ -1514,6 +1550,56 @@ function renderIcsInfo() {
   out.replaceChildren(el('div', { text: `${icsData.file || 'Agenda'} ingelezen op ${fmtLong(icsData.importedAt)}: ${icsData.events.length} afspraken, ${codes.length} projecten.` }),
     codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : '');
 }
+/* ================= app lock (web app) ================= */
+// lock.json is made at build time from the APP_PASSWORD secret: {salt, iter, hash} (PBKDF2-SHA256).
+// Once unlocked, this phone can remember it; the same password also opens the agenda.
+let lockInfo = null, appPass = '';
+async function pbkdf2(pass, saltB64, iter) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64(saltB64), iterations: iter, hash: 'SHA-256' }, base, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+async function ensureUnlocked() {
+  try {
+    const r = await fetch('lock.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    lockInfo = await r.json();
+  } catch { lockInfo = await Local.getKV('lockInfo'); if (!lockInfo) return; }
+  Local.setKV('lockInfo', lockInfo);
+  const saved = await Local.getKV('unlock');
+  if (saved && saved.hash === lockInfo.hash && saved.pass) { appPass = saved.pass; return; }
+  $('#lock').hidden = false;
+  setTimeout(() => $('#lockPass').focus(), 200);
+  await new Promise(resolve => {
+    $('#lockForm').onsubmit = async e => {
+      e.preventDefault();
+      const pass = $('#lockPass').value;
+      $('#lockGo').disabled = true; $('#lockErr').textContent = '';
+      let good = false;
+      try { good = (await pbkdf2(pass, lockInfo.salt, lockInfo.iter)) === lockInfo.hash; } catch {}
+      $('#lockGo').disabled = false;
+      if (!good) { $('#lockErr').textContent = 'Wachtwoord klopt niet. Probeer het opnieuw.'; $('#lockPass').select(); return; }
+      appPass = pass;
+      if ($('#lockRemember').checked) await Local.setKV('unlock', { hash: lockInfo.hash, pass });
+      $('#lockPass').value = '';
+      $('#lock').hidden = true;
+      resolve();
+    };
+  });
+}
+async function lockNow() {
+  await Local.setKV('unlock', null);
+  location.reload();
+}
+function renderSecurity() {
+  $('#secTitle').hidden = $('#secBox').hidden = !WEB;
+  if (!WEB) return;
+  $('#secBox').replaceChildren(lockInfo
+    ? el('div', {}, el('div', { class: 'hint top', text: 'De app is beveiligd met een wachtwoord. Op deze iPhone is hij ontgrendeld.' }),
+        el('div', { class: 'small-btns' }, el('button', { class: 'btn btn-plain', onclick: lockNow, text: 'Vergrendel op deze iPhone' })))
+    : el('div', { class: 'hint top', text: 'Nog geen wachtwoord ingesteld. Voeg op GitHub het geheim APP_PASSWORD toe (zie de handleiding); daarna vraagt de app erom.' }));
+}
+
 /* ================= navigation ================= */
 function show(view) {
   $('#editor').hidden = view !== 'editor';
@@ -1530,6 +1616,7 @@ function renderSetupCard() { $('#setupCard').hidden = !!settings.name; }
 async function boot() {
   renderHome();
   await Local.open();
+  if (WEB) await ensureUnlocked();
   const claude = window.claude;
   const use = name => (claude && typeof claude.use === 'function') ? claude.use(name).catch(() => null) : Promise.resolve(null);
   const [db, user, assets, sample, mcp, downloads] = await Promise.all(['db', 'user', 'assets', 'sample', 'mcp', 'downloads'].map(use));

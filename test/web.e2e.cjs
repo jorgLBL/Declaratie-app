@@ -14,8 +14,11 @@ const ok = (c, n) => { c ? pass++ : (fail++, failures.push(n)); console.log((c ?
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: 'application/json', webmanifest: 'application/manifest+json', png: 'image/png', gz: 'application/gzip', enc: 'application/json' };
 
 (async () => {
-  // agenda file encrypted with a known password, as the GitHub workflow would make it
-  execFileSync('node', [path.join(here, '../tools/agenda-sync.mjs'), path.join(site, 'agenda.enc')], { env: { ...process.env, TZ: 'Europe/Amsterdam', AGENDA_ICS_URL: path.join(here, 'sample.ics'), AGENDA_PASSWORD: 'Zomer2026!' } });
+  // build with an app password and an agenda file encrypted with it, as the GitHub workflow does
+  const PASS = 'Zomer2026!';
+  execFileSync('node', [path.join(here, '../tools/build.mjs')], { env: { ...process.env, APP_PASSWORD: PASS } });
+  execFileSync('node', [path.join(here, '../tools/agenda-sync.mjs'), path.join(site, 'agenda.enc')], { env: { ...process.env, TZ: 'Europe/Amsterdam', AGENDA_ICS_URL: path.join(here, 'sample.ics'), APP_PASSWORD: PASS } });
+  ok(!fs.readFileSync(path.join(site, 'lock.json'), 'utf8').includes(PASS) && !fs.readFileSync(path.join(site, 'index.html'), 'utf8').includes(PASS), 'wachtwoord zelf staat nergens in de site');
   let offline = false;
   const server = http.createServer((req, res) => {
     if (offline) { req.socket.destroy(); return; }
@@ -41,9 +44,39 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   const text = s => page.$eval(s, e => e.textContent);
   const settle = () => page.waitForFunction(() => !document.querySelector('#edStatus .spin') && !document.querySelector('#projAgenda .spin'), null, { timeout: 90000 });
 
-  console.log('Start en instellingen');
+  const unlock = async (pw, remember = true) => {
+    await page.waitForSelector('#lock:not([hidden])');
+    await page.fill('#lockPass', pw);
+    if (!remember) await page.uncheck('#lockRemember');
+    await page.click('#lockGo');
+  };
+  console.log('Wachtwoordslot');
   await page.goto(url);
+  await page.waitForSelector('#lock:not([hidden])');
+  ok((await page.$$('#list .row')).length === 0 && (await text('#storageNote')).includes('laden'), 'slot verschijnt voordat er iets geladen wordt');
+  await page.screenshot({ path: path.join(out, 'web-lock.png') });
+  await unlock('fout');
+  await page.waitForFunction(() => document.querySelector('#lockErr').textContent.length > 0);
+  ok((await text('#lockErr')).includes('klopt niet') && await page.$eval('#lock', e => !e.hidden), 'verkeerd wachtwoord geweigerd');
+  await unlock(PASS);
+  await page.waitForSelector('#lock', { state: 'hidden' });
   await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(true, 'goed wachtwoord ontgrendelt');
+  await page.reload(); await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(await page.$eval('#lock', e => e.hidden), 'onthouden: na herstart geen wachtwoord nodig');
+  await page.click('#openSettings');
+  ok((await text('#secBox')).includes('beveiligd'), 'instellingen tonen beveiliging');
+  await Promise.all([page.waitForNavigation(), page.click('#secBox button')]);
+  await page.waitForSelector('#lock:not([hidden])');
+  ok(true, '"Vergrendel op deze iPhone" vraagt weer om het wachtwoord');
+  await unlock(PASS, false);
+  await page.waitForSelector('#lock', { state: 'hidden' });
+  await page.reload(); await page.waitForSelector('#lock:not([hidden])');
+  ok(true, 'zonder onthouden: na herstart weer wachtwoord nodig');
+  await unlock(PASS);
+  await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+
+  console.log('Start en instellingen');
   ok(true, 'app start zonder Claude, "Bewaard op deze telefoon"');
   ok(await page.$eval('link[rel=manifest]', e => !!e.href) && await page.$eval('link[rel=apple-touch-icon]', e => !!e.href), 'beginscherm-icoon en manifest aanwezig');
   await page.click('#setupGo');
@@ -54,9 +87,9 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   await page.fill('#sSyncPass', 'fout'); await page.click('#syncTest');
   await page.waitForFunction(() => /klopt|Gelukt|niet|nog geen/.test(document.querySelector('#syncResult').textContent), null, { timeout: 15000 }).catch(() => {});
   ok((await text('#syncResult')).includes('klopt niet'), 'verkeerd agenda-wachtwoord: duidelijke melding');
-  await page.fill('#sSyncPass', 'Zomer2026!'); await page.click('#syncTest');
+  await page.fill('#sSyncPass', ''); await page.click('#syncTest');
   await page.waitForFunction(() => /Gelukt/.test(document.querySelector('#syncResult').textContent), null, { timeout: 15000 }).catch(() => {});
-  ok((await text('#syncResult')).includes('2 afspraken'), 'versleutelde agenda opgehaald en ontsleuteld');
+  ok((await text('#syncResult')).includes('2 afspraken'), 'agenda ontsleuteld met het app-wachtwoord (veld leeg gelaten)');
   await page.click('#setDone');
 
   console.log('Bonnen lezen op de telefoon (echte tekstherkenning)');
@@ -116,6 +149,18 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   ok(await val('#inAmount') === '18,90', 'tekstherkenning werkt offline');
   ok((await text('#projAgenda')).length > 0, 'agenda offline: laatst opgehaalde versie of nette melding');
 
+  ok(await page.$eval('#lock', e => e.hidden), 'offline: onthouden ontgrendeling blijft werken');
+
+  console.log('Zonder ingesteld wachtwoord');
+  offline = false;
+  execFileSync('node', [path.join(here, '../tools/build.mjs')], { env: { ...process.env, APP_PASSWORD: '' } });
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  const p2 = await ctx2.newPage();
+  await p2.goto(url); await p2.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(await p2.$eval('#lock', e => e.hidden), 'geen slot als er geen wachtwoord is ingesteld');
+  await p2.click('#openSettings');
+  ok((await p2.$eval('#secBox', e => e.textContent)).includes('APP_PASSWORD'), 'instellingen leggen uit hoe je een wachtwoord instelt');
+  await ctx2.close();
   fs.rmSync(path.join(site, 'agenda.enc'), { force: true });
   console.log('\nFouten in console: ' + (errors.length ? '\n' + errors.join('\n') : 'geen'));
   console.log(`\n${pass} geslaagd, ${fail} mislukt`);

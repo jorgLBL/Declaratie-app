@@ -24,6 +24,7 @@ jobs:
     env:
       AGENDA_ICS_URL: ${{ secrets.AGENDA_ICS_URL }}
       AGENDA_PASSWORD: ${{ secrets.AGENDA_PASSWORD }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
       TZ: Europe/Amsterdam
     steps:
       - id: check
@@ -38,7 +39,7 @@ jobs:
       - if: steps.check.outputs.go == 'true'
         run: node tools/build.mjs
       - name: Agenda bijwerken
-        if: steps.check.outputs.go == 'true' && env.AGENDA_ICS_URL != '' && env.AGENDA_PASSWORD != ''
+        if: steps.check.outputs.go == 'true' && env.AGENDA_ICS_URL != '' && (env.AGENDA_PASSWORD != '' || env.APP_PASSWORD != '')
         run: node tools/agenda-sync.mjs site/agenda.enc
       - if: steps.check.outputs.go == 'true'
         uses: actions/configure-pages@v5
