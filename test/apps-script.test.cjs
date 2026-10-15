@@ -37,5 +37,24 @@ console.log('Apps Script');
   ok(data && data.events.length === 4 && data.updated, 'eigen pagina toont agenda-code die terug te lezen is');
   ok(page.includes('4 afspraken met projectcode') && page.includes('4 projecten'), 'pagina vat samen wat gevonden is');
 }
+console.log('Concept in Gmail');
+{
+  const { ctx, props, out } = run('');
+  ctx.doGet({ parameter: { key: 'x' } });
+  const post = (key, body) => JSON.parse(ctx.doPost({ parameter: { key }, postData: { contents: JSON.stringify(body) } }).text);
+  const img = Buffer.from('nep-jpeg-bytes').toString('base64');
+  const req = { action: 'draft', to: 'administratie@bedrijf.nl', subject: 'Declaratie KLMN2041 – Lunch – € 23,50', body: 'Beste administratie,\n\nHierbij…', name: 'Jorg', attachments: [{ name: 'Declaratie_KLMN2041.jpg', type: 'image/jpeg', data: img }] };
+  ok(post('fout', req).error === 'key' && out.drafts.length === 0, 'verkeerde sleutel: geen concept');
+  ok(post(props.KEY, { ...req, to: 'geen-adres' }).error === 'to', 'ongeldig adres geweigerd');
+  ok(post(props.KEY, { ...req, action: 'send' }).error === 'request' && out.drafts.length === 0, 'alleen concepten, nooit direct versturen');
+  const r = post(props.KEY, req);
+  const d = out.drafts[0];
+  ok(r.ok && r.account === 'jorg@werk.nl' && r.messageId, 'concept gemaakt, afzender = account van het script');
+  ok(d && d.to === req.to && d.subject === req.subject && d.body === req.body && d.options.name === 'Jorg', 'aan, onderwerp, tekst en naam kloppen');
+  ok(d && d.options.attachments.length === 1 && d.options.attachments[0].name === 'Declaratie_KLMN2041.jpg' && Buffer.from(d.options.attachments[0].bytes).toString() === 'nep-jpeg-bytes', 'bijlage komt ongeschonden mee');
+  out.gmailFails = true;
+  const f = post(props.KEY, req);
+  ok(f.error === 'gmail' && /niet toegestaan/.test(f.message), 'Gmail-fout wordt netjes teruggegeven');
+}
 console.log(`\n${pass} geslaagd, ${fail} mislukt`);
 process.exit(fail ? 1 : 0);

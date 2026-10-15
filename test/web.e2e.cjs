@@ -30,12 +30,17 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   const url = `http://localhost:${server.address().port}/`;
   // stand-in for script.google.com: the real Code.gs behind it, on another origin (as in reality)
   const gas = require('./gas-harness.cjs').run('');
+  const gasPosts = [];
   const gasServer = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (u.pathname === '/login') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<html>Inloggen bij Google</html>'); }
-    const r = gas.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) });
-    res.writeHead(200, { 'content-type': r.mime === 'json' ? 'application/json' : 'text/plain', 'access-control-allow-origin': '*' });
-    res.end(r.text);
+    const reply = r => { res.writeHead(200, { 'content-type': r.mime === 'json' ? 'application/json' : 'text/plain', 'access-control-allow-origin': '*' }); res.end(r.text); };
+    if (req.method === 'POST') {
+      let body = ''; req.on('data', c => { body += c; });
+      req.on('end', () => { gasPosts.push(req.headers['content-type']); reply(gas.ctx.doPost({ parameter: Object.fromEntries(u.searchParams), postData: { contents: body } })); });
+      return;
+    }
+    reply(gas.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) }));
   }).listen(0);
   const gasBase = `http://127.0.0.1:${gasServer.address().port}/exec`;
   gas.ctx.doGet({ parameter: { key: 'x' } }); // creates the key
@@ -153,19 +158,50 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   await page.click('#calSrc [data-src=gas]');
   ok(await page.$eval('#calGas', e => !e.hidden), 'keuze "Google (werk)" toont de koppeling');
   const tryLink = async link => {
-    await page.$eval('#gasResult', e => { e.textContent = ''; });
+    await page.$eval('#gasAcct', e => { e.textContent = ''; });
     await page.fill('#sGasUrl', link); await page.click('#gasTest');
-    await page.waitForFunction(() => { const t = document.querySelector('#gasResult').textContent; return t && !/ophalen/.test(t); }, null, { timeout: 10000 });
-    return text('#gasResult');
+    await page.waitForFunction(() => { const t = document.querySelector('#gasAcct').textContent; return t && !/testen/.test(t); }, null, { timeout: 10000 });
+    return text('#gasAcct');
   };
   ok((await tryLink(gasBase + '?key=fout')).includes('sleutel onjuist'), 'verkeerde sleutel: duidelijke melding');
   ok((await tryLink(gasBase.replace('/exec', '/login') + '?key=x')).includes('Iedereen'), 'link die om inloggen vraagt: uitleg over toegang "Iedereen"');
-  ok((await tryLink(gasBase + '?key=' + gas.props.KEY)).includes('4 afspraken met projectcode'), 'goede link: afspraken opgehaald (ander domein)');
+  const good = await tryLink(gasBase + '?key=' + gas.props.KEY);
+  ok(good.includes('4 afspraken met projectcode'), 'goede link: afspraken opgehaald (ander domein)');
+  ok(good.includes('Verbonden met jorg@werk.nl'), 'koppeling toont het werkaccount');
+  ok((await text('#viaHint')).includes('klaar in Gmail van jorg@werk.nl'), 'versturen staat op Gmail van het werkaccount');
   await page.click('#setDone');
   await page.setInputFiles('#camInput', path.join(here, 'photo-lunch.jpg'));
   await page.waitForSelector('#editor:not([hidden])'); await settle();
   ok(await val('#inProject') === 'KLMN2041', 'bon van 8 okt krijgt project uit werkagenda');
-  await page.click('#edCancel');
+
+  console.log('Versturen via Gmail');
+  await page.click('#edDeclare'); await page.waitForSelector('#sendWrap:not([hidden])');
+  await page.waitForFunction(() => !document.querySelector('#sendShare').disabled, null, { timeout: 15000 });
+  ok((await text('#sendShareLabel')) === 'Zet klaar in Gmail' && (await text('#sendSteps')).includes('jorg@werk.nl') && await page.$eval('#sendMailto', e => e.hidden), 'knop en uitleg voor Gmail, geen kopieerstappen');
+  ok(await page.$$eval('.copy[data-copy]', bs => bs.every(b => b.hidden)), 'geen kopieerknoppen in Gmail-modus');
+  await page.click('#sendShare');
+  await page.waitForSelector('#sendDone:not([hidden])', { timeout: 10000 });
+  const dr = gas.out.drafts.pop();
+  ok(dr && dr.to === 'administratie@bedrijf.nl' && dr.subject.startsWith('Declaratie KLMN2041') && dr.body.includes('Totaal te vergoeden') && dr.body.includes('Sanne de Vries'), 'concept met adres, onderwerp en tekst in Gmail');
+  ok(dr && dr.options.attachments.length === 1 && dr.options.attachments[0].type === 'image/jpeg' && dr.options.attachments[0].bytes.length > 20000, 'foto als bijlage in het concept (' + (dr ? dr.options.attachments[0].bytes.length : 0) + ' bytes)');
+  ok(/^text\/plain/.test(gasPosts[gasPosts.length - 1] || ''), 'eenvoudig verzoek (text/plain), zoals Google het vereist');
+  ok((await text('#gmailDoneText')).includes('van jorg@werk.nl') && (await page.getAttribute('#openGmailWeb', 'href')).includes('/u/jorg%40werk.nl/#drafts') && (await page.getAttribute('#openGmailApp', 'href')).startsWith('googlegmail:'), 'knoppen naar Gmail-app en Gmail-concepten');
+  await page.screenshot({ path: path.join(out, 'web-gmail.png') });
+  await page.click('#sendNotYet');
+  gas.out.gmailFails = true;
+  await page.click('#sendShare'); await page.waitForTimeout(600);
+  ok((await text('#toast')).includes('Gmail weigerde') && await page.$eval('#sendDone', e => e.hidden), 'Gmail-fout: duidelijke melding, niet als verstuurd gemarkeerd');
+  gas.out.gmailFails = false;
+  await page.fill('#mTo', 'geen-adres'); await page.click('#sendShare'); await page.waitForTimeout(200);
+  ok((await text('#toast')).includes('adres'), 'ongeldig adres eerst in de app opgevangen');
+  await page.fill('#mTo', 'administratie@bedrijf.nl');
+  await page.click('#sendClose');
+  await page.click('#openSettings'); await page.click('#sendVia [data-via=share]'); await page.click('#setDone');
+  await page.click('#list .row >> nth=0'); await page.waitForSelector('#editor:not([hidden])');
+  await page.click('#edDeclare'); await page.waitForSelector('#sendWrap:not([hidden])');
+  ok((await text('#sendShareLabel')) === 'Verstuur via Mail' && await page.$$eval('.copy[data-copy]', bs => bs.every(b => !b.hidden)), 'terugschakelen naar deelmenu werkt');
+  await page.click('#sendClose');
+  await page.click('#openSettings'); await page.click('#sendVia [data-via=gmail]'); await page.click('#setDone');
   await page.click('#openSettings');
   await page.fill('#sGasUrl', ''); await page.dispatchEvent('#sGasUrl', 'change');
   await page.fill('#sGasCode', 'iets anders'); await page.click('#gasImport');
@@ -180,10 +216,11 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   await page.reload(); await page.waitForTimeout(1500);
   const sw = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); const keys = await caches.keys(); const c = keys.length ? await caches.open(keys[0]) : null; return { active: !!(r && r.active), cached: c ? (await c.keys()).length : 0 }; });
   ok(sw.active && sw.cached >= 10, `offline-cache actief (${sw.cached} bestanden)`);
+  const before = { rows: (await page.$$('#list .row')).length, total: await text('#summary .big') };
   offline = true; await ctx.setOffline(true);
   await page.reload();
   await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent), null, { timeout: 10000 }).catch(() => {});
-  ok((await page.$$('#list .row')).length === 0 && (await text('#summary .big')) === '€ 0,00', 'app opent zonder internet, gegevens bewaard');
+  ok((await page.$$('#list .row')).length === before.rows && (await text('#summary .big')) === before.total, `app opent zonder internet, gegevens bewaard (${before.rows} open, ${before.total})`);
   await page.click('#tabSent');
   ok((await page.$$('#list .row')).length === 3, 'verstuurde bonnen zichtbaar offline');
   await page.setInputFiles('#camInput', path.join(here, 'photo-parking.jpg'));

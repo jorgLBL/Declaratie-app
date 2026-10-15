@@ -408,6 +408,23 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       <div class="field"><label for="sIban">IBAN</label><input id="sIban" class="mono" autocomplete="off" placeholder="Optioneel: NL00 BANK 0123 4567 89" autocapitalize="characters"></div>
     </div>
 
+    <div class="group-title" id="gTitle" hidden>Google-werkaccount</div>
+    <div class="group" id="gBox" hidden>
+      <div class="hint top">Koppel het script uit je werkaccount. Daarmee zet de app declaraties met bijlage klaar in je Gmail en leest hij je werkagenda. Eenmalig instellen: zie de handleiding in je GitHub-project, kopje “Google-werkaccount koppelen”.</div>
+      <div class="field"><label for="sGasUrl">Koppeling</label><input id="sGasUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/…"></div>
+      <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="gasTest">Test koppeling</button></div>
+      <div class="result" id="gasAcct" hidden></div>
+    </div>
+
+    <div class="group-title" id="viaTitle" hidden>Versturen</div>
+    <div class="group" id="viaBox" hidden>
+      <div class="radio-row" id="sendVia">
+        <button class="cat" data-via="gmail" aria-pressed="true">Gmail (werkaccount)</button>
+        <button class="cat" data-via="share" aria-pressed="false">Deelmenu (Mail)</button>
+      </div>
+      <div class="hint" id="viaHint"></div>
+    </div>
+
     <div class="group-title">Werkagenda</div>
     <div class="group">
       <div class="hint top">De app zoekt op de datum van de bon naar afspraken met een projectcode (4 letters + 4 cijfers, bijv. ABCD1234) in de titel, beschrijving of locatie.</div>
@@ -428,9 +445,7 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
         <div class="result" id="calResult" hidden></div>
       </div>
       <div id="calGas" hidden>
-        <div class="hint top">Een klein script in je werk-Google-account geeft afspraken met een projectcode door. Eenmalig instellen: zie de handleiding in je GitHub-project, kopje “Google-werkagenda”.</div>
-        <div class="field"><label for="sGasUrl">Agenda-link</label><input id="sGasUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/…"></div>
-        <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="gasTest">Agenda ophalen</button></div>
+        <div class="hint top">Gebruikt de Google-koppeling hierboven. Lukt die niet (je werk staat toegang “Iedereen” niet toe), plak dan hier de agenda-code van de scriptpagina.</div>
         <div class="field stack"><label for="sGasCode">Of plak de agenda-code</label><textarea id="sGasCode" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="DECL1:…" style="min-height:72px;font-family:var(--f-mono);font-size:13px"></textarea></div>
         <div class="small-btns"><button class="btn btn-plain" id="gasImport">Code inlezen</button></div>
         <div class="result" id="gasResult" hidden></div>
@@ -494,6 +509,13 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       <a class="btn btn-plain btn-block" id="sendMailto" href="#" target="_blank" rel="noopener">Open mailconcept zonder bijlage</a>
     </div>
     <div class="done-box" id="sendDone" hidden>
+      <div id="gmailDone" hidden style="display:grid;gap:10px">
+        <p id="gmailDoneText"><b>De e-mail staat klaar in Gmail</b>, bij Concepten. Open hem, controleer en verstuur.</p>
+        <div class="confirm">
+          <a class="btn btn-primary" id="openGmailApp" href="googlegmail:///">Open Gmail-app</a>
+          <a class="btn btn-plain" id="openGmailWeb" href="https://mail.google.com/mail/#drafts" target="_blank" rel="noopener">Open in browser</a>
+        </div>
+      </div>
       <p><b>Is de mail verstuurd?</b> Dan zet ik deze bonnen bij Verstuurd.</p>
       <div class="confirm">
         <button class="btn btn-plain" id="sendNotYet">Nog niet</button>
@@ -585,7 +607,7 @@ Laat het gerust weten als er nog iets ontbreekt.
 Met vriendelijke groet,
 
 {naam}`;
-const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', gasUrl: '', template: DEFAULT_TEMPLATE };
+const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', gasUrl: '', gasAccount: '', sendVia: 'gmail', template: DEFAULT_TEMPLATE };
 
 let toastTimer;
 function toast(msg, action) {
@@ -1165,7 +1187,7 @@ async function gasAgenda(force) {
     try { data = await res.json(); } catch { throw { code: 'gas_access' }; }
     if (data && data.error === 'key') throw { code: 'gas_key' };
     if (!data || !Array.isArray(data.events)) throw { code: 'gas_access' };
-    gasCache = { events: data.events, updated: data.updated, via: 'link' }; gasFetchedAt = Date.now();
+    gasCache = { events: data.events, updated: data.updated, account: data.account || '', via: 'link' }; gasFetchedAt = Date.now();
     Local.setKV('agendaGas', gasCache);
     return gasCache;
   } catch (e) {
@@ -1191,9 +1213,9 @@ function agendaSummary(d) {
 }
 function calErrorText(e) {
   const c = e && e.code;
-  if (c === 'gas_none') return 'Plak in Instellingen → Werkagenda de agenda-link of agenda-code uit het script.';
-  if (c === 'gas_key') return 'De agenda-link klopt niet (sleutel onjuist). Kopieer hem opnieuw van de scriptpagina.';
-  if (c === 'gas_access') return 'De agenda-link vraagt om inloggen of is niet bereikbaar. Zet bij Implementeren de toegang op “Iedereen”, of gebruik de agenda-code.';
+  if (c === 'gas_none') return 'Stel in Instellingen de Google-koppeling in, of plak bij Werkagenda de agenda-code uit het script.';
+  if (c === 'gas_key') return 'De Google-koppeling klopt niet (sleutel onjuist). Kopieer de link opnieuw van de scriptpagina.';
+  if (c === 'gas_access') return 'De Google-koppeling vraagt om inloggen of is niet bereikbaar. Zet bij Implementeren de toegang op “Iedereen”, of gebruik voor de agenda de agenda-code.';
   if (c === 'gas_net') return 'Agenda niet bereikbaar (geen internet?). Typ de code of kies een recent project.';
   if (c === 'gas_code') return 'Dit is geen geldige agenda-code. Kopieer hem opnieuw van de scriptpagina (begint met DECL1:).';
   if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in, of stel een app-wachtwoord in.';
@@ -1263,7 +1285,19 @@ let sendChecked = new Set();
 let attachment = null; // {blob, name}
 let attachSeq = 0;
 
+const viaGmail = () => WEB && settings.sendVia !== 'share' && !!settings.gasUrl;
 function renderSteps() {
+  const gm = viaGmail();
+  $('#sendShareLabel').textContent = gm ? 'Zet klaar in Gmail' : 'Verstuur via Mail';
+  $('#sendMailto').hidden = gm;
+  for (const b of document.querySelectorAll('.copy[data-copy]')) b.hidden = gm; // nothing to copy when Gmail gets it all
+  $('#gmailDone').hidden = !gm;
+  if (gm) {
+    const acct = settings.gasAccount;
+    $('#sendSteps').innerHTML = [`De app zet een nieuwe e-mail met bijlage klaar in Gmail${acct ? ' van <b>' + acct.replace(/[<&]/g, '') + '</b>' : ''}.`, 'Open Gmail en tik bij <b>Concepten</b> op de e-mail.', 'Controleer en verstuur.'].map(t => `<li>${t}</li>`).join('');
+    $('#openGmailWeb').href = `https://mail.google.com/mail/u/${encodeURIComponent(acct || '0')}/#drafts`;
+    return;
+  }
   const steps = caps.downloads
     ? ['De mailtekst wordt gekopieerd en het deelmenu opent met de bijlage.', 'Kies <b>Mail</b>. Vul bij Aan het adres in.', 'Houd je vinger in het bericht en kies <b>Plak</b>. Verstuur.']
     : ['Het deelmenu opent met de bijlage en de mailtekst.', 'Kies <b>Mail</b>. Vul bij Aan het adres in (na de eerste keer vult je iPhone het aan).', 'Controleer het onderwerp en verstuur.'];
@@ -1454,8 +1488,39 @@ async function buildPdf(sel) {
   return doc.output('blob');
 }
 
+const GMAIL_ERRORS = {
+  key: 'De Google-koppeling klopt niet (sleutel onjuist). Kopieer de link opnieuw van de scriptpagina.',
+  to: 'Het adres bij Aan is niet geldig.',
+  size: 'De bijlage is te groot voor Gmail (max. 20 MB). Declareer minder bonnen tegelijk.',
+  request: 'Het script begreep de opdracht niet. Zet de nieuwste versie van het script in je werkaccount.',
+};
+async function sendViaGmail() {
+  const to = $('#mTo').value.trim();
+  if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(to)) { toast('Vul bij Aan het adres van de administratie in.'); $('#mTo').focus(); return; }
+  const btn = $('#sendShare'), label = $('#sendShareLabel');
+  btn.disabled = true; label.textContent = 'Bezig met klaarzetten…';
+  try {
+    const { blob, name } = attachment;
+    const data = (await blobToDataURL(blob)).split(',')[1];
+    const payload = { action: 'draft', to, subject: $('#mSubject').value, body: $('#mBody').value, name: settings.name || '', attachments: [{ name, type: blob.type || (name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'), data }] };
+    let res;
+    try { res = await fetch(settings.gasUrl, { method: 'POST', body: JSON.stringify(payload), credentials: 'omit' }); }
+    catch { throw { msg: navigator.onLine ? 'Het script is niet bereikbaar of vraagt om inloggen. Controleer of de nieuwste versie is geïmplementeerd met toegang “Iedereen”.' : 'Geen internet. Probeer het opnieuw als je verbinding hebt.' }; }
+    let r; try { r = await res.json(); } catch { throw { msg: 'Het script gaf geen antwoord. Heeft het al toestemming voor Gmail? Zie de handleiding: “Gmail toestaan”.' }; }
+    if (!r.ok) throw { msg: GMAIL_ERRORS[r.error] || ('Gmail weigerde het concept' + (r.message ? ': ' + r.message : '') + '. Zie de handleiding: “Gmail toestaan”.') };
+    if (r.account && r.account !== settings.gasAccount) { settings.gasAccount = r.account; persistSettings(); renderSteps(); }
+    if (to !== settings.adminEmail) { settings.adminEmail = to; persistSettings(); }
+    $('#gmailDoneText').replaceChildren(el('b', { text: 'De e-mail staat klaar in Gmail' }), `${r.account ? ' van ' + r.account : ''}, bij Concepten. Open hem, controleer en verstuur.`);
+    $('#sendMain').hidden = true; $('#sendDone').hidden = false;
+    $('#sendDone').scrollIntoView({ behavior: 'smooth', block: 'end' });
+    toast('Concept staat klaar in Gmail');
+  } catch (e) {
+    toast(e && e.msg ? e.msg : 'Klaarzetten lukte niet. Probeer het opnieuw.');
+  } finally { btn.disabled = false; renderSteps(); }
+}
 $('#sendShare').addEventListener('click', async () => {
   if (!attachment) return;
+  if (viaGmail()) return sendViaGmail();
   const body = $('#mBody').value;
   // the share sheet carries the text itself; only Claude's save sheet needs it on the clipboard
   const copied = caps.downloads ? copyText(body) : Promise.resolve(false); // start inside the tap, before any await
@@ -1507,7 +1572,7 @@ $('#sendWrap').addEventListener('click', e => { if (e.target === $('#sendWrap'))
 function openSettings() {
   $('#sName').value = settings.name; $('#sEmail').value = settings.adminEmail; $('#sIban').value = settings.iban;
   $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sGasUrl').value = settings.gasUrl || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
-  renderCalSrc(); renderIcsInfo(); renderGasInfo(); renderSecurity();
+  renderCalSrc(); renderIcsInfo(); renderGasInfo(); renderSecurity(); renderVia(); $('#gasAcct').hidden = true;
   $('#calResult').hidden = true;
   $('#storageInfo').textContent = mode === 'cloud'
     ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
@@ -1526,10 +1591,25 @@ function renderCalSrc() {
 }
 $('#gasTest').onclick = async () => {
   await persistSettings();
-  const out = $('#gasResult'); out.hidden = false; out.textContent = 'Agenda ophalen…';
-  try { out.replaceChildren(...agendaSummary(await gasAgenda(true))); }
-  catch (e) { out.textContent = calErrorText(e); }
+  const out = $('#gasAcct'); out.hidden = false; out.textContent = 'Koppeling testen…';
+  try {
+    const d = await gasAgenda(true);
+    if (d.account && d.account !== settings.gasAccount) { settings.gasAccount = d.account; persistSettings(); }
+    out.replaceChildren(el('div', { text: `Verbonden met ${d.account || 'je werkaccount'}. Declaraties worden vanaf dit adres klaargezet in Gmail.`, style: 'margin-bottom:6px' }), ...agendaSummary(d));
+    renderGasInfo(); renderVia();
+  } catch (e) { out.textContent = calErrorText(e); }
 };
+function renderVia() {
+  $('#gTitle').hidden = $('#gBox').hidden = $('#viaTitle').hidden = $('#viaBox').hidden = !WEB;
+  if (!WEB) return;
+  for (const b of document.querySelectorAll('#sendVia .cat')) b.setAttribute('aria-pressed', b.dataset.via === settings.sendVia ? 'true' : 'false');
+  $('#viaHint').textContent = settings.sendVia === 'share'
+    ? 'Het deelmenu opent met de bijlage en de mailtekst. Kies daar Mail of Gmail en vul het adres in.'
+    : settings.gasUrl
+      ? `De app zet de e-mail met bijlage klaar in Gmail${settings.gasAccount ? ' van ' + settings.gasAccount : ''}. Jij opent het concept en verstuurt het.`
+      : 'Stel eerst de Google-koppeling hierboven in. Tot die tijd gaat versturen via het deelmenu.';
+}
+for (const b of document.querySelectorAll('#sendVia .cat')) b.onclick = () => { settings.sendVia = b.dataset.via; renderVia(); persistSettings(); };
 $('#gasImport').onclick = () => {
   const out = $('#gasResult'); out.hidden = false;
   try { const d = importGasCode($('#sGasCode').value); $('#sGasCode').value = ''; out.replaceChildren(...agendaSummary(d)); toast('Agenda ingelezen'); }
@@ -1556,7 +1636,7 @@ async function persistSettings() {
   settings.adminEmail = $('#sEmail').value.trim();
   settings.iban = $('#sIban').value.trim().toUpperCase();
   settings.calendarId = $('#sCalId').value.trim();
-  if ($('#sGasUrl').value.trim() !== settings.gasUrl) { settings.gasUrl = $('#sGasUrl').value.trim(); gasFetchedAt = 0; }
+  if ($('#sGasUrl').value.trim() !== settings.gasUrl) { settings.gasUrl = $('#sGasUrl').value.trim(); settings.gasAccount = ''; gasFetchedAt = 0; renderVia(); }
   if ($('#sSyncPass').value !== settings.syncPass) { settings.syncPass = $('#sSyncPass').value; syncFetched = false; syncCache = null; }
   settings.template = $('#sTpl').value.trim() ? $('#sTpl').value : DEFAULT_TEMPLATE;
   try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }

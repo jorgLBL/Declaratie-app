@@ -7,6 +7,8 @@
  *
  * - Met de geheime sleutel (?key=...) geeft het de afspraken als JSON (voor de app) of als
  *   .ics (?format=ics, voor het bijwerken via GitHub).
+ * - Met de sleutel zet het ook een declaratie-mail met bijlage klaar als concept in je Gmail
+ *   (alleen een concept: versturen doe je zelf in Gmail).
  * - Zonder sleutel toont het alleen aan jou een pagina met je app-link en een agenda-code.
  */
 
@@ -29,10 +31,38 @@ function doGet(e) {
   return setupPage_();
 }
 
+var MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+function doPost(e) {
+  var p = (e && e.parameter) || {};
+  if (p.key !== getKey_()) return json_({ error: 'key' });
+  var req;
+  try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ error: 'request' }); }
+  if (req.action !== 'draft') return json_({ error: 'request' });
+  var to = String(req.to || '').trim();
+  if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(to)) return json_({ error: 'to' });
+  try {
+    var total = 0;
+    var blobs = (req.attachments || []).slice(0, 10).map(function (a) {
+      var bytes = Utilities.base64Decode(a.data);
+      total += bytes.length;
+      return Utilities.newBlob(bytes, a.type || 'application/octet-stream', String(a.name || 'bijlage'));
+    });
+    if (total > MAX_ATTACHMENT_BYTES) return json_({ error: 'size' });
+    var options = { attachments: blobs };
+    if (req.name) options.name = String(req.name).slice(0, 80);
+    var draft = GmailApp.createDraft(to, String(req.subject || '').slice(0, 250), String(req.body || ''), options);
+    return json_({ ok: true, id: draft.getId(), messageId: draft.getMessage().getId(), account: Session.getEffectiveUser().getEmail() });
+  } catch (err) {
+    return json_({ error: 'gmail', message: String(err && err.message || err) });
+  }
+}
+
 /** Voer deze functie één keer uit in de editor om toegang tot je agenda te geven en de werking te testen. */
 function test() {
   var data = collect_();
   Logger.log(data.events.length + ' afspraken met projectcode gevonden. Voorbeeld: ' + JSON.stringify(data.events.slice(0, 3)));
+  Logger.log('Gmail: ' + GmailApp.getDrafts().length + ' concepten. Mails worden klaargezet vanaf ' + Session.getEffectiveUser().getEmail() + '.');
 }
 
 function getKey_() {
@@ -77,7 +107,7 @@ function collect_() {
     };
     codes.forEach(function (code) { events.push({ s: item.s, e: item.e, code: code, t: item.t, time: item.time }); });
   });
-  return { updated: fmt(now, "yyyy-MM-dd'T'HH:mm"), tz: tz, events: events };
+  return { updated: fmt(now, "yyyy-MM-dd'T'HH:mm"), tz: tz, account: Session.getEffectiveUser().getEmail(), events: events };
 }
 
 function toIcs_(events) {
@@ -116,9 +146,9 @@ function setupPage_() {
     '.ok{color:#0F7F57;font-weight:600;min-height:1.4em}</style>' +
     '<h1>Werkagenda voor de Declaratie-app</h1>' +
     '<p>' + data.events.length + ' afspraken met projectcode gevonden (' + new Set(data.events.map(function (e) { return e.code; })).size + ' projecten).</p>' +
-    '<h2>1. Automatisch (aanbevolen)</h2><p>Kopieer deze link en plak hem in de app bij Instellingen → Werkagenda → Google (werk) → Agenda-link. Deel hem met niemand.</p>' +
+    '<h2>1. Koppeling (aanbevolen)</h2><p>Kopieer deze link en plak hem in de app bij Instellingen → Google-werkaccount → Koppeling. Daarmee zet de app mails klaar in Gmail en leest hij je agenda. Deel hem met niemand.</p>' +
     '<textarea id="l" rows="4" readonly>' + esc(link) + '</textarea><button onclick="cp(\'l\')">Kopieer link</button>' +
-    '<h2>2. Werkt de link niet?</h2><p>Kopieer dan deze agenda-code en plak hem in de app bij Agenda-code. Herhaal dit af en toe om je agenda bij te werken.</p>' +
+    '<h2>2. Werkt de link niet?</h2><p>Kopieer dan voor je agenda deze agenda-code en plak hem in de app bij Werkagenda → Google (werk) → agenda-code. Herhaal dit af en toe om je agenda bij te werken.</p>' +
     '<textarea id="c" rows="4" readonly>' + esc(code) + '</textarea><button onclick="cp(\'c\')">Kopieer agenda-code</button>' +
     '<p class="ok" id="m"></p>' +
     '<script>function cp(id){var t=document.getElementById(id);t.focus();t.select();t.setSelectionRange(0,t.value.length);' +

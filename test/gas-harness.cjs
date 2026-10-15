@@ -22,12 +22,26 @@ const EVENTS = [
 ];
 function run(viewer) {
   const props = {};
-  const out = {};
+  const out = { drafts: [] };
   const ctx = {
     CalendarApp: { GuestStatus: { NO: 'NO' }, getDefaultCalendar: () => ({ getTimeZone: () => TZ, getEvents: () => EVENTS }) },
     Session: { getEffectiveUser: () => ({ getEmail: () => 'jorg@werk.nl' }), getActiveUser: () => ({ getEmail: () => viewer }), getScriptTimeZone: () => TZ },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
-    Utilities: { getUuid: () => require('crypto').randomUUID(), formatDate, base64Encode: s => Buffer.from(s, 'utf8').toString('base64'), Charset: { UTF_8: 'UTF-8' } },
+    Utilities: {
+      getUuid: () => require('crypto').randomUUID(), formatDate, Charset: { UTF_8: 'UTF-8' },
+      base64Encode: s => Buffer.from(s, 'utf8').toString('base64'),
+      base64Decode: s => [...Buffer.from(s, 'base64')],
+      newBlob: (bytes, type, name) => ({ bytes, type, name }),
+    },
+    GmailApp: {
+      getDrafts: () => out.drafts,
+      createDraft: (to, subject, body, options) => {
+        if (out.gmailFails) throw new Error('Gmail is niet toegestaan');
+        const d = { to, subject, body, options, id: 'r-' + (out.drafts.length + 1) };
+        out.drafts.push(d);
+        return { getId: () => d.id, getMessage: () => ({ getId: () => '18f' + out.drafts.length }) };
+      },
+    },
     ContentService: { MimeType: { JSON: 'json', ICAL: 'ical' }, createTextOutput: t => ({ text: t, setMimeType(m) { this.mime = m; return this; } }) },
     HtmlService: { createHtmlOutput: h => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; } }) },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/ABC/exec' }) },
