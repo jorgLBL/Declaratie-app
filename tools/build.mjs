@@ -47,6 +47,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localh
 `;
 fs.writeFileSync(path.join(site, 'index.html'), head + app + tail);
 
+// app password (GitHub secret APP_PASSWORD): only a salted PBKDF2 hash goes into the public site
+if (process.env.APP_PASSWORD) {
+  const iter = 310000, salt = crypto.randomBytes(16);
+  const hash = crypto.pbkdf2Sync(process.env.APP_PASSWORD, salt, iter, 32, 'sha256');
+  fs.writeFileSync(path.join(site, 'lock.json'), JSON.stringify({ v: 1, iter, salt: salt.toString('base64'), hash: hash.toString('base64') }));
+}
+
 // service worker: version = hash of everything it caches, so a new build replaces the old cache
 const files = [];
 const walk = d => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); fs.statSync(p).isDirectory() ? walk(p) : files.push(path.relative(site, p).split(path.sep).join('/')); } };
@@ -58,4 +65,4 @@ const sw = read('web/sw.js')
   .replace('__FILES__', JSON.stringify(files.filter(f => !/LICENSE|\.md$/.test(f))));
 fs.writeFileSync(path.join(site, 'sw.js'), sw);
 fs.writeFileSync(path.join(site, '.nojekyll'), '');
-console.log(`dist/artifact.html (${(app.length / 1024).toFixed(0)} kB) en site/ (${files.length + 1} bestanden) gebouwd`);
+console.log(`dist/artifact.html (${(app.length / 1024).toFixed(0)} kB) en site/ (${files.length + 1} bestanden) gebouwd${process.env.APP_PASSWORD ? ', met wachtwoord' : ', zonder wachtwoord'}`);

@@ -14,8 +14,11 @@ const ok = (c, n) => { c ? pass++ : (fail++, failures.push(n)); console.log((c ?
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: 'application/json', webmanifest: 'application/manifest+json', png: 'image/png', gz: 'application/gzip', enc: 'application/json' };
 
 (async () => {
-  // agenda file encrypted with a known password, as the GitHub workflow would make it
-  execFileSync('node', [path.join(here, '../tools/agenda-sync.mjs'), path.join(site, 'agenda.enc')], { env: { ...process.env, TZ: 'Europe/Amsterdam', AGENDA_ICS_URL: path.join(here, 'sample.ics'), AGENDA_PASSWORD: 'Zomer2026!' } });
+  // build with an app password and an agenda file encrypted with it, as the GitHub workflow does
+  const PASS = 'Zomer2026!';
+  execFileSync('node', [path.join(here, '../tools/build.mjs')], { env: { ...process.env, APP_PASSWORD: PASS } });
+  execFileSync('node', [path.join(here, '../tools/agenda-sync.mjs'), path.join(site, 'agenda.enc')], { env: { ...process.env, TZ: 'Europe/Amsterdam', AGENDA_ICS_URL: path.join(here, 'sample.ics'), APP_PASSWORD: PASS } });
+  ok(!fs.readFileSync(path.join(site, 'lock.json'), 'utf8').includes(PASS) && !fs.readFileSync(path.join(site, 'index.html'), 'utf8').includes(PASS), 'wachtwoord zelf staat nergens in de site');
   let offline = false;
   const server = http.createServer((req, res) => {
     if (offline) { req.socket.destroy(); return; }
@@ -25,6 +28,23 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
     fs.createReadStream(p).pipe(res);
   }).listen(0);
   const url = `http://localhost:${server.address().port}/`;
+  // stand-in for script.google.com: the real Code.gs behind it, on another origin (as in reality)
+  const gas = require('./gas-harness.cjs').run('');
+  const gasPosts = [];
+  const gasServer = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.pathname === '/login') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<html>Inloggen bij Google</html>'); }
+    const reply = r => { res.writeHead(200, { 'content-type': r.mime === 'json' ? 'application/json' : 'text/plain', 'access-control-allow-origin': '*' }); res.end(r.text); };
+    if (req.method === 'POST') {
+      let body = ''; req.on('data', c => { body += c; });
+      req.on('end', () => { gasPosts.push(req.headers['content-type']); reply(gas.ctx.doPost({ parameter: Object.fromEntries(u.searchParams), postData: { contents: body } })); });
+      return;
+    }
+    reply(gas.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) }));
+  }).listen(0);
+  const gasBase = `http://127.0.0.1:${gasServer.address().port}/exec`;
+  gas.ctx.doGet({ parameter: { key: 'x' } }); // creates the key
+  const ownerPage = require('./gas-harness.cjs').run('jorg@werk.nl');
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'nl-NL', timezoneId: 'Europe/Amsterdam' });
   await ctx.addInitScript(() => {
@@ -36,14 +56,46 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
-  page.on('console', m => { if (m.type() === 'error' && !(offline && /INTERNET_DISCONNECTED/.test(m.text()))) errors.push(m.text()); });
+  // expected: going offline, and the deliberately blocked "login" link in the work-agenda test
+  const expected = t => (offline && /INTERNET_DISCONNECTED/.test(t)) || /\/login\?key|ERR_FAILED/.test(t);
+  page.on('console', m => { if (m.type() === 'error' && !expected(m.text())) errors.push(m.text()); });
   const val = s => page.$eval(s, e => e.value);
   const text = s => page.$eval(s, e => e.textContent);
   const settle = () => page.waitForFunction(() => !document.querySelector('#edStatus .spin') && !document.querySelector('#projAgenda .spin'), null, { timeout: 90000 });
 
-  console.log('Start en instellingen');
+  const unlock = async (pw, remember = true) => {
+    await page.waitForSelector('#lock:not([hidden])');
+    await page.fill('#lockPass', pw);
+    if (!remember) await page.uncheck('#lockRemember');
+    await page.click('#lockGo');
+  };
+  console.log('Wachtwoordslot');
   await page.goto(url);
+  await page.waitForSelector('#lock:not([hidden])');
+  ok((await page.$$('#list .row')).length === 0 && (await text('#storageNote')).includes('laden'), 'slot verschijnt voordat er iets geladen wordt');
+  await page.screenshot({ path: path.join(out, 'web-lock.png') });
+  await unlock('fout');
+  await page.waitForFunction(() => document.querySelector('#lockErr').textContent.length > 0);
+  ok((await text('#lockErr')).includes('klopt niet') && await page.$eval('#lock', e => !e.hidden), 'verkeerd wachtwoord geweigerd');
+  await unlock(PASS);
+  await page.waitForSelector('#lock', { state: 'hidden' });
   await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(true, 'goed wachtwoord ontgrendelt');
+  await page.reload(); await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(await page.$eval('#lock', e => e.hidden), 'onthouden: na herstart geen wachtwoord nodig');
+  await page.click('#openSettings');
+  ok((await text('#secBox')).includes('beveiligd'), 'instellingen tonen beveiliging');
+  await Promise.all([page.waitForNavigation(), page.click('#secBox button')]);
+  await page.waitForSelector('#lock:not([hidden])');
+  ok(true, '"Vergrendel op deze iPhone" vraagt weer om het wachtwoord');
+  await unlock(PASS, false);
+  await page.waitForSelector('#lock', { state: 'hidden' });
+  await page.reload(); await page.waitForSelector('#lock:not([hidden])');
+  ok(true, 'zonder onthouden: na herstart weer wachtwoord nodig');
+  await unlock(PASS);
+  await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+
+  console.log('Start en instellingen');
   ok(true, 'app start zonder Claude, "Bewaard op deze telefoon"');
   ok(await page.$eval('link[rel=manifest]', e => !!e.href) && await page.$eval('link[rel=apple-touch-icon]', e => !!e.href), 'beginscherm-icoon en manifest aanwezig');
   await page.click('#setupGo');
@@ -54,9 +106,9 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   await page.fill('#sSyncPass', 'fout'); await page.click('#syncTest');
   await page.waitForFunction(() => /klopt|Gelukt|niet|nog geen/.test(document.querySelector('#syncResult').textContent), null, { timeout: 15000 }).catch(() => {});
   ok((await text('#syncResult')).includes('klopt niet'), 'verkeerd agenda-wachtwoord: duidelijke melding');
-  await page.fill('#sSyncPass', 'Zomer2026!'); await page.click('#syncTest');
+  await page.fill('#sSyncPass', ''); await page.click('#syncTest');
   await page.waitForFunction(() => /Gelukt/.test(document.querySelector('#syncResult').textContent), null, { timeout: 15000 }).catch(() => {});
-  ok((await text('#syncResult')).includes('2 afspraken'), 'versleutelde agenda opgehaald en ontsleuteld');
+  ok((await text('#syncResult')).includes('2 afspraken'), 'agenda ontsleuteld met het app-wachtwoord (veld leeg gelaten)');
   await page.click('#setDone');
 
   console.log('Bonnen lezen op de telefoon (echte tekstherkenning)');
@@ -101,14 +153,74 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   ok((await text('#summary .big')) === '€ 0,00', 'alles bij Verstuurd');
   await page.screenshot({ path: path.join(out, 'web-home.png') });
 
+  console.log('Google-werkagenda via script');
+  await page.click('#openSettings');
+  await page.click('#calSrc [data-src=gas]');
+  ok(await page.$eval('#calGas', e => !e.hidden), 'keuze "Google (werk)" toont de koppeling');
+  const tryLink = async link => {
+    await page.$eval('#gasAcct', e => { e.textContent = ''; });
+    await page.fill('#sGasUrl', link); await page.click('#gasTest');
+    await page.waitForFunction(() => { const t = document.querySelector('#gasAcct').textContent; return t && !/testen/.test(t); }, null, { timeout: 10000 });
+    return text('#gasAcct');
+  };
+  ok((await tryLink(gasBase + '?key=fout')).includes('sleutel onjuist'), 'verkeerde sleutel: duidelijke melding');
+  ok((await tryLink(gasBase.replace('/exec', '/login') + '?key=x')).includes('Iedereen'), 'link die om inloggen vraagt: uitleg over toegang "Iedereen"');
+  const good = await tryLink(gasBase + '?key=' + gas.props.KEY);
+  ok(good.includes('4 afspraken met projectcode'), 'goede link: afspraken opgehaald (ander domein)');
+  ok(good.includes('Verbonden met jorg@werk.nl'), 'koppeling toont het werkaccount');
+  ok((await text('#viaHint')).includes('klaar in Gmail van jorg@werk.nl'), 'versturen staat op Gmail van het werkaccount');
+  await page.click('#setDone');
+  await page.setInputFiles('#camInput', path.join(here, 'photo-lunch.jpg'));
+  await page.waitForSelector('#editor:not([hidden])'); await settle();
+  ok(await val('#inProject') === 'KLMN2041', 'bon van 8 okt krijgt project uit werkagenda');
+
+  console.log('Versturen via Gmail');
+  await page.click('#edDeclare'); await page.waitForSelector('#sendWrap:not([hidden])');
+  await page.waitForFunction(() => !document.querySelector('#sendShare').disabled, null, { timeout: 15000 });
+  ok((await text('#sendShareLabel')) === 'Zet klaar in Gmail' && (await text('#sendSteps')).includes('jorg@werk.nl') && await page.$eval('#sendMailto', e => e.hidden), 'knop en uitleg voor Gmail, geen kopieerstappen');
+  ok(await page.$$eval('.copy[data-copy]', bs => bs.every(b => b.hidden)), 'geen kopieerknoppen in Gmail-modus');
+  await page.click('#sendShare');
+  await page.waitForSelector('#sendDone:not([hidden])', { timeout: 10000 });
+  const dr = gas.out.drafts.pop();
+  ok(dr && dr.to === 'administratie@bedrijf.nl' && dr.subject.startsWith('Declaratie KLMN2041') && dr.body.includes('Totaal te vergoeden') && dr.body.includes('Sanne de Vries'), 'concept met adres, onderwerp en tekst in Gmail');
+  ok(dr && dr.options.attachments.length === 1 && dr.options.attachments[0].type === 'image/jpeg' && dr.options.attachments[0].bytes.length > 20000, 'foto als bijlage in het concept (' + (dr ? dr.options.attachments[0].bytes.length : 0) + ' bytes)');
+  ok(/^text\/plain/.test(gasPosts[gasPosts.length - 1] || ''), 'eenvoudig verzoek (text/plain), zoals Google het vereist');
+  ok((await text('#gmailDoneText')).includes('van jorg@werk.nl') && (await page.getAttribute('#openGmailWeb', 'href')).includes('/u/jorg%40werk.nl/#drafts') && (await page.getAttribute('#openGmailApp', 'href')).startsWith('googlegmail:'), 'knoppen naar Gmail-app en Gmail-concepten');
+  await page.screenshot({ path: path.join(out, 'web-gmail.png') });
+  await page.click('#sendNotYet');
+  gas.out.gmailFails = true;
+  await page.click('#sendShare'); await page.waitForTimeout(600);
+  ok((await text('#toast')).includes('Gmail weigerde') && await page.$eval('#sendDone', e => e.hidden), 'Gmail-fout: duidelijke melding, niet als verstuurd gemarkeerd');
+  gas.out.gmailFails = false;
+  await page.fill('#mTo', 'geen-adres'); await page.click('#sendShare'); await page.waitForTimeout(200);
+  ok((await text('#toast')).includes('adres'), 'ongeldig adres eerst in de app opgevangen');
+  await page.fill('#mTo', 'administratie@bedrijf.nl');
+  await page.click('#sendClose');
+  await page.click('#openSettings'); await page.click('#sendVia [data-via=share]'); await page.click('#setDone');
+  await page.click('#list .row >> nth=0'); await page.waitForSelector('#editor:not([hidden])');
+  await page.click('#edDeclare'); await page.waitForSelector('#sendWrap:not([hidden])');
+  ok((await text('#sendShareLabel')) === 'Verstuur via Mail' && await page.$$eval('.copy[data-copy]', bs => bs.every(b => !b.hidden)), 'terugschakelen naar deelmenu werkt');
+  await page.click('#sendClose');
+  await page.click('#openSettings'); await page.click('#sendVia [data-via=gmail]'); await page.click('#setDone');
+  await page.click('#openSettings');
+  await page.fill('#sGasUrl', ''); await page.dispatchEvent('#sGasUrl', 'change');
+  await page.fill('#sGasCode', 'iets anders'); await page.click('#gasImport');
+  ok((await text('#gasResult')).includes('geen geldige agenda-code'), 'ongeldige agenda-code geweigerd');
+  const code = /DECL1:[A-Za-z0-9+/=]+/.exec(ownerPage.ctx.doGet({ parameter: {} }).html)[0];
+  await page.fill('#sGasCode', code); await page.click('#gasImport');
+  ok((await text('#gasResult')).includes('uit agenda-code'), 'agenda-code ingelezen zonder link');
+  await page.click('#setDone');
+  await page.click('#tabOpen');
+
   console.log('Offline starten');
   await page.reload(); await page.waitForTimeout(1500);
   const sw = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); const keys = await caches.keys(); const c = keys.length ? await caches.open(keys[0]) : null; return { active: !!(r && r.active), cached: c ? (await c.keys()).length : 0 }; });
   ok(sw.active && sw.cached >= 10, `offline-cache actief (${sw.cached} bestanden)`);
+  const before = { rows: (await page.$$('#list .row')).length, total: await text('#summary .big') };
   offline = true; await ctx.setOffline(true);
   await page.reload();
   await page.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent), null, { timeout: 10000 }).catch(() => {});
-  ok((await page.$$('#list .row')).length === 0 && (await text('#summary .big')) === '€ 0,00', 'app opent zonder internet, gegevens bewaard');
+  ok((await page.$$('#list .row')).length === before.rows && (await text('#summary .big')) === before.total, `app opent zonder internet, gegevens bewaard (${before.rows} open, ${before.total})`);
   await page.click('#tabSent');
   ok((await page.$$('#list .row')).length === 3, 'verstuurde bonnen zichtbaar offline');
   await page.setInputFiles('#camInput', path.join(here, 'photo-parking.jpg'));
@@ -116,10 +228,22 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   ok(await val('#inAmount') === '18,90', 'tekstherkenning werkt offline');
   ok((await text('#projAgenda')).length > 0, 'agenda offline: laatst opgehaalde versie of nette melding');
 
+  ok(await page.$eval('#lock', e => e.hidden), 'offline: onthouden ontgrendeling blijft werken');
+
+  console.log('Zonder ingesteld wachtwoord');
+  offline = false;
+  execFileSync('node', [path.join(here, '../tools/build.mjs')], { env: { ...process.env, APP_PASSWORD: '' } });
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  const p2 = await ctx2.newPage();
+  await p2.goto(url); await p2.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok(await p2.$eval('#lock', e => e.hidden), 'geen slot als er geen wachtwoord is ingesteld');
+  await p2.click('#openSettings');
+  ok((await p2.$eval('#secBox', e => e.textContent)).includes('APP_PASSWORD'), 'instellingen leggen uit hoe je een wachtwoord instelt');
+  await ctx2.close();
   fs.rmSync(path.join(site, 'agenda.enc'), { force: true });
   console.log('\nFouten in console: ' + (errors.length ? '\n' + errors.join('\n') : 'geen'));
   console.log(`\n${pass} geslaagd, ${fail} mislukt`);
   if (fail) console.log('Mislukt:\n- ' + failures.join('\n- '));
-  await browser.close(); server.close();
+  await browser.close(); server.close(); gasServer.close();
   process.exit(fail ? 1 : 0);
 })();

@@ -1,6 +1,7 @@
 // Fetches the work agenda (.ics link), keeps only appointments with a project code and writes them
-// encrypted with AGENDA_PASSWORD, so the public web app can read them and nobody else can.
-// Usage: AGENDA_ICS_URL=<link or file> AGENDA_PASSWORD=<password> node tools/agenda-sync.mjs <output file>
+// encrypted with the app password, so the public web app can read them and nobody else can.
+// Usage: AGENDA_ICS_URL=<link or file> APP_PASSWORD=<password> node tools/agenda-sync.mjs <output file>
+// (AGENDA_PASSWORD, if set, is used instead of APP_PASSWORD.)
 import fs from 'fs';
 import { createRequire } from 'module';
 import { webcrypto as crypto } from 'crypto';
@@ -8,9 +9,9 @@ import { webcrypto as crypto } from 'crypto';
 const require = createRequire(import.meta.url);
 const L = require('../src/lib.js');
 const src = (process.env.AGENDA_ICS_URL || '').trim().replace(/^webcal:\/\//i, 'https://');
-const pass = process.env.AGENDA_PASSWORD || '';
+const pass = process.env.AGENDA_PASSWORD || process.env.APP_PASSWORD || '';
 const out = process.argv[2] || 'agenda.enc';
-if (!src || !pass) { console.error('AGENDA_ICS_URL en AGENDA_PASSWORD zijn nodig.'); process.exit(1); }
+if (!src || !pass) { console.error('AGENDA_ICS_URL en APP_PASSWORD (of AGENDA_PASSWORD) zijn nodig.'); process.exit(1); }
 
 let text;
 if (/^https?:\/\//i.test(src)) {
