@@ -39,21 +39,26 @@ Je hebt er geen beheerder voor nodig. Doe dit op een computer:
 
 1. Ga naar **script.google.com**, ingelogd met je **werkaccount** → **Nieuw project**.
 2. Wis de voorbeeldcode en plak de inhoud van [`tools/apps-script/Code.gs`](tools/apps-script/Code.gs). Klik op **Opslaan** (diskette-icoon).
-3. Kies bovenin de functie **test** en klik op **Uitvoeren**. Google vraagt toegang tot je **agenda** en **Gmail**: sta beide toe. Onderaan staat dan hoeveel afspraken met projectcode er zijn gevonden en vanaf welk adres mails worden klaargezet.
-4. **Implementeren → Nieuwe implementatie** → bij "Type selecteren" (tandwiel) **Web-app**:
+3. Klik links naast **Services** op **+**, kies **Google Calendar API** en klik op **Toevoegen**. Daarmee haalt het script je agenda in één keer op in plaats van afspraak voor afspraak.
+4. Kies bovenin de functie **test** en klik op **Uitvoeren**. Google vraagt toegang tot je **agenda** en **Gmail**: sta beide toe. Na enkele seconden staat in het uitvoeringslogboek hoeveel afspraken met projectcode er zijn gevonden, hoe lang dat duurde en vanaf welk adres mails worden klaargezet.
+5. **Implementeren → Nieuwe implementatie** → bij "Type selecteren" (tandwiel) **Web-app**:
    - Uitvoeren als: **Ik**
    - Wie heeft toegang: **Iedereen**
    - **Implementeren** → kopieer de **URL van de web-app**.
-5. Open die URL in je browser (ingelogd met je werkaccount). Je ziet een pagina met je **koppeling** (een link) en een **agenda-code**.
-6. Stuur de koppeling naar je iPhone, bijvoorbeeld via Notities of een mail aan jezelf. Deel hem verder met niemand.
-7. In de app: Instellingen → **Google-werkaccount** → plak de link bij Koppeling → **Test koppeling**. Je ziet "Verbonden met" je werkadres.
-8. Instellingen → **Versturen** staat dan op **Gmail (werkaccount)**, en bij Werkagenda kies je **Google (werk)**.
+6. Open die URL in je browser (ingelogd met je werkaccount). Je ziet een pagina met je **koppeling** (een link) en een **agenda-code**.
+7. Stuur de koppeling naar je iPhone, bijvoorbeeld via Notities of een mail aan jezelf. Deel hem verder met niemand.
+8. In de app: Instellingen → **Google-werkaccount** → plak de link bij Koppeling → **Test koppeling**. Je ziet "Verbonden met" je werkadres.
+9. Instellingen → **Versturen** staat dan op **Gmail (werkaccount)**, en bij Werkagenda kies je **Google (werk)**.
 
-**Staat de keuze "Iedereen" er niet** (je werk staat dat niet toe)? Kies dan **Alleen ikzelf**. De app kan dan geen mails klaarzetten en verstuurt via het deelmenu. Voor je agenda kopieer je de **agenda-code** van de pagina uit stap 5 en plak je die in de app bij Werkagenda → Google (werk). Herhaal dat af en toe om nieuwe afspraken mee te nemen.
+**Staat de keuze "Iedereen" er niet** (je werk staat dat niet toe)? Kies dan **Alleen ikzelf**. De app kan dan geen mails klaarzetten en verstuurt via het deelmenu. Voor je agenda kopieer je de **agenda-code** van de pagina uit stap 6 en plak je die in de app bij Werkagenda → Google (werk). Herhaal dat af en toe om nieuwe afspraken mee te nemen.
 
-**Script al eerder ingesteld?** Plak de nieuwe versie van `Code.gs`, sla op, voer **test** opnieuw uit (sta Gmail toe) en kies **Implementeren → Implementaties beheren** → potlood → Versie: **Nieuwe versie** → **Implementeren**. De link blijft hetzelfde.
+**Blijft "Uitvoering gestart" geel staan?**
+- Kijk of er een venster **Autorisatie vereist** openstaat, eventueel achter je browservenster of geblokkeerd als pop-up. Kies je werkaccount, dan **Geavanceerd → Ga naar … (onveilig)** en **Toestaan**. Dat "onveilig" staat er omdat het je eigen, niet door Google gecontroleerde script is.
+- Heb je stap 3 overgeslagen? Dan leest het script afspraak voor afspraak en kan dat bij een volle agenda minuten duren. Voeg de dienst Google Calendar API toe en voer **test** opnieuw uit; het duurt dan enkele seconden.
 
-Het script maakt alleen **concepten**; versturen doe je altijd zelf in Gmail. Zo kan ook iemand die je link te pakken krijgt geen mail namens jou versturen. Het geeft van je agenda alleen datum, tijd, titel en projectcode van afspraken met een projectcode door; afgeslagen afspraken tellen niet mee. Link ongeldig maken: verwijder in het script bij **Projectinstellingen → Scripteigenschappen** de eigenschap `KEY`; de pagina uit stap 5 geeft dan een nieuwe link.
+**Script al eerder ingesteld?** Plak de nieuwe versie van `Code.gs`, sla op, voeg de dienst **Google Calendar API** toe als die er nog niet staat, voer **test** opnieuw uit (sta Gmail toe) en kies **Implementeren → Implementaties beheren** → potlood → Versie: **Nieuwe versie** → **Implementeren**. De link blijft hetzelfde.
+
+Het script maakt alleen **concepten**; versturen doe je altijd zelf in Gmail. Zo kan ook iemand die je link te pakken krijgt geen mail namens jou versturen. Het geeft van je agenda alleen datum, tijd, titel en projectcode van afspraken met een projectcode door; afgeslagen afspraken tellen niet mee. Link ongeldig maken: verwijder in het script bij **Projectinstellingen → Scripteigenschappen** de eigenschap `KEY`; de pagina uit stap 6 geeft dan een nieuwe link.
 
 ### Agenda automatisch laten bijwerken via GitHub (optioneel)
 

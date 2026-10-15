@@ -37,6 +37,26 @@ console.log('Apps Script');
   ok(data && data.events.length === 4 && data.updated, 'eigen pagina toont agenda-code die terug te lezen is');
   ok(page.includes('4 afspraken met projectcode') && page.includes('4 projecten'), 'pagina vat samen wat gevonden is');
 }
+console.log('Snel ophalen');
+{
+  const api = run('', { api: true });
+  api.ctx.doGet({ parameter: { key: 'x' } });
+  const d = JSON.parse(api.ctx.doGet({ parameter: { key: api.props.KEY } }).text);
+  const by = day => d.events.filter(e => e.s <= day && day <= e.e).map(e => `${e.code} ${e.time}`).sort().join(',');
+  ok(d.via === 'api' && api.out.apiCalls === 2 && api.out.lastQuery.singleEvents === true, 'met Calendar API: alle afspraken in 2 aanvragen (2 pagina\'s)');
+  ok(by('2026-10-08') === 'KLMN2041 10:00–13:00' && by('2026-10-09') === 'RTSV3310 09:00–10:00' && by('2026-10-14') === 'ABCD1234 hele dag' && by('2026-10-15') === '' && by('2026-10-11') === 'WXYZ1111 22:00–02:00',
+    'zelfde uitkomst via API: afgeslagen en geannuleerd weg, hele dag en over middernacht goed');
+  api.ctx.doGet({ parameter: { key: api.props.KEY } });
+  ok(api.out.apiCalls === 2, 'tweede vraag binnen 10 minuten komt uit het geheugen, geen nieuwe aanvraag');
+  const slow = run('');
+  slow.ctx.doGet({ parameter: { key: 'x' } });
+  const s2 = JSON.parse(slow.ctx.doGet({ parameter: { key: slow.props.KEY } }).text);
+  ok(s2.via === 'calendarapp' && s2.events.length === d.events.length, 'zonder die dienst: zelfde afspraken, via CalendarApp');
+  ok(slow.out.calls <= 6 * 2 + 4 * 4, `zonder die dienst: weinig losse vragen per afspraak (${slow.out.calls} voor 6 afspraken)`);
+  slow.ctx.test();
+  ok(slow.out.logs.some(l => /traag; voeg de dienst Google Calendar API toe/.test(l)) && slow.out.logs.some(l => /jorg@werk\.nl/.test(l)), 'test() meldt snelheid, advies en afzender');
+}
+
 console.log('Concept in Gmail');
 {
   const { ctx, props, out } = run('');
