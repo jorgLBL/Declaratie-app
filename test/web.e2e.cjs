@@ -28,6 +28,18 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
     fs.createReadStream(p).pipe(res);
   }).listen(0);
   const url = `http://localhost:${server.address().port}/`;
+  // stand-in for script.google.com: the real Code.gs behind it, on another origin (as in reality)
+  const gas = require('./gas-harness.cjs').run('');
+  const gasServer = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.pathname === '/login') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<html>Inloggen bij Google</html>'); }
+    const r = gas.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) });
+    res.writeHead(200, { 'content-type': r.mime === 'json' ? 'application/json' : 'text/plain', 'access-control-allow-origin': '*' });
+    res.end(r.text);
+  }).listen(0);
+  const gasBase = `http://127.0.0.1:${gasServer.address().port}/exec`;
+  gas.ctx.doGet({ parameter: { key: 'x' } }); // creates the key
+  const ownerPage = require('./gas-harness.cjs').run('jorg@werk.nl');
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'nl-NL', timezoneId: 'Europe/Amsterdam' });
   await ctx.addInitScript(() => {
@@ -39,7 +51,9 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
-  page.on('console', m => { if (m.type() === 'error' && !(offline && /INTERNET_DISCONNECTED/.test(m.text()))) errors.push(m.text()); });
+  // expected: going offline, and the deliberately blocked "login" link in the work-agenda test
+  const expected = t => (offline && /INTERNET_DISCONNECTED/.test(t)) || /\/login\?key|ERR_FAILED/.test(t);
+  page.on('console', m => { if (m.type() === 'error' && !expected(m.text())) errors.push(m.text()); });
   const val = s => page.$eval(s, e => e.value);
   const text = s => page.$eval(s, e => e.textContent);
   const settle = () => page.waitForFunction(() => !document.querySelector('#edStatus .spin') && !document.querySelector('#projAgenda .spin'), null, { timeout: 90000 });
@@ -134,6 +148,34 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   ok((await text('#summary .big')) === '€ 0,00', 'alles bij Verstuurd');
   await page.screenshot({ path: path.join(out, 'web-home.png') });
 
+  console.log('Google-werkagenda via script');
+  await page.click('#openSettings');
+  await page.click('#calSrc [data-src=gas]');
+  ok(await page.$eval('#calGas', e => !e.hidden), 'keuze "Google (werk)" toont de koppeling');
+  const tryLink = async link => {
+    await page.$eval('#gasResult', e => { e.textContent = ''; });
+    await page.fill('#sGasUrl', link); await page.click('#gasTest');
+    await page.waitForFunction(() => { const t = document.querySelector('#gasResult').textContent; return t && !/ophalen/.test(t); }, null, { timeout: 10000 });
+    return text('#gasResult');
+  };
+  ok((await tryLink(gasBase + '?key=fout')).includes('sleutel onjuist'), 'verkeerde sleutel: duidelijke melding');
+  ok((await tryLink(gasBase.replace('/exec', '/login') + '?key=x')).includes('Iedereen'), 'link die om inloggen vraagt: uitleg over toegang "Iedereen"');
+  ok((await tryLink(gasBase + '?key=' + gas.props.KEY)).includes('4 afspraken met projectcode'), 'goede link: afspraken opgehaald (ander domein)');
+  await page.click('#setDone');
+  await page.setInputFiles('#camInput', path.join(here, 'photo-lunch.jpg'));
+  await page.waitForSelector('#editor:not([hidden])'); await settle();
+  ok(await val('#inProject') === 'KLMN2041', 'bon van 8 okt krijgt project uit werkagenda');
+  await page.click('#edCancel');
+  await page.click('#openSettings');
+  await page.fill('#sGasUrl', ''); await page.dispatchEvent('#sGasUrl', 'change');
+  await page.fill('#sGasCode', 'iets anders'); await page.click('#gasImport');
+  ok((await text('#gasResult')).includes('geen geldige agenda-code'), 'ongeldige agenda-code geweigerd');
+  const code = /DECL1:[A-Za-z0-9+/=]+/.exec(ownerPage.ctx.doGet({ parameter: {} }).html)[0];
+  await page.fill('#sGasCode', code); await page.click('#gasImport');
+  ok((await text('#gasResult')).includes('uit agenda-code'), 'agenda-code ingelezen zonder link');
+  await page.click('#setDone');
+  await page.click('#tabOpen');
+
   console.log('Offline starten');
   await page.reload(); await page.waitForTimeout(1500);
   const sw = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); const keys = await caches.keys(); const c = keys.length ? await caches.open(keys[0]) : null; return { active: !!(r && r.active), cached: c ? (await c.keys()).length : 0 }; });
@@ -165,6 +207,6 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   console.log('\nFouten in console: ' + (errors.length ? '\n' + errors.join('\n') : 'geen'));
   console.log(`\n${pass} geslaagd, ${fail} mislukt`);
   if (fail) console.log('Mislukt:\n- ' + failures.join('\n- '));
-  await browser.close(); server.close();
+  await browser.close(); server.close(); gasServer.close();
   process.exit(fail ? 1 : 0);
 })();

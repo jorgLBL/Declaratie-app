@@ -413,7 +413,8 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
       <div class="hint top">De app zoekt op de datum van de bon naar afspraken met een projectcode (4 letters + 4 cijfers, bijv. ABCD1234) in de titel, beschrijving of locatie.</div>
       <div class="radio-row" id="calSrc">
         <button class="cat" data-src="google" aria-pressed="true">Google</button>
-        <button class="cat" data-src="sync" aria-pressed="false" hidden>Automatisch</button>
+        <button class="cat" data-src="gas" aria-pressed="false" hidden>Google (werk)</button>
+        <button class="cat" data-src="sync" aria-pressed="false" hidden>Via GitHub</button>
         <button class="cat" data-src="ics" aria-pressed="false">Bestand (.ics)</button>
         <button class="cat" data-src="none" aria-pressed="false">Geen</button>
       </div>
@@ -425,6 +426,14 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
           <button class="btn btn-plain" id="calLoad">Toon mijn agenda’s</button>
         </div>
         <div class="result" id="calResult" hidden></div>
+      </div>
+      <div id="calGas" hidden>
+        <div class="hint top">Een klein script in je werk-Google-account geeft afspraken met een projectcode door. Eenmalig instellen: zie de handleiding in je GitHub-project, kopje “Google-werkagenda”.</div>
+        <div class="field"><label for="sGasUrl">Agenda-link</label><input id="sGasUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/…"></div>
+        <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="gasTest">Agenda ophalen</button></div>
+        <div class="field stack"><label for="sGasCode">Of plak de agenda-code</label><textarea id="sGasCode" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="DECL1:…" style="min-height:72px;font-family:var(--f-mono);font-size:13px"></textarea></div>
+        <div class="small-btns"><button class="btn btn-plain" id="gasImport">Code inlezen</button></div>
+        <div class="result" id="gasResult" hidden></div>
       </div>
       <div id="calSync" hidden>
         <div class="hint top">Je agenda wordt elk uur bijgewerkt via GitHub, versleuteld met je eigen wachtwoord. Eenmalig instellen: zie de handleiding in je GitHub-project.</div>
@@ -576,7 +585,7 @@ Laat het gerust weten als er nog iets ontbreekt.
 Met vriendelijke groet,
 
 {naam}`;
-const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', template: DEFAULT_TEMPLATE };
+const DEFAULTS = { name: '', adminEmail: '', iban: '', calSource: WEB ? 'ics' : 'google', calendarId: '', syncPass: '', gasUrl: '', template: DEFAULT_TEMPLATE };
 
 let toastTimer;
 function toast(msg, action) {
@@ -1084,6 +1093,10 @@ function eventWhen(ev) {
   return [t(s.dateTime), t(e.dateTime)].filter(Boolean).join('–');
 }
 async function agendaFor(date) {
+  if (settings.calSource === 'gas') {
+    const data = await gasAgenda(false);
+    return data.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
+  }
   if (settings.calSource === 'sync') {
     const data = await syncAgenda(false);
     return data.events.filter(e => e.s <= date && date <= e.e).map(e => ({ code: e.code, title: e.t, time: e.time || 'hele dag' }));
@@ -1135,8 +1148,54 @@ async function syncAgenda(force) {
   }
   return syncCache;
 }
+// Google work agenda through the Apps Script (tools/apps-script/Code.gs): a link that answers with
+// JSON, refreshed at most every 30 minutes, or a pasted "DECL1:" code. The last result is kept for offline use.
+let gasCache = null, gasFetchedAt = 0;
+async function gasAgenda(force) {
+  if (!gasCache) gasCache = await Local.getKV('agendaGas');
+  const url = (settings.gasUrl || '').trim();
+  if (!url) { if (gasCache) return gasCache; throw { code: 'gas_none' }; }
+  if (!force && gasCache && (Date.now() - gasFetchedAt < 30 * 60e3 || !navigator.onLine)) return gasCache;
+  try {
+    let res;
+    try { res = await fetch(url + (url.includes('?') ? '&' : '?') + 'format=json&t=' + Date.now(), { cache: 'no-store', credentials: 'omit' }); }
+    catch { throw { code: navigator.onLine ? 'gas_access' : 'gas_net' }; }
+    if (!res.ok) throw { code: 'gas_access' };
+    let data;
+    try { data = await res.json(); } catch { throw { code: 'gas_access' }; }
+    if (data && data.error === 'key') throw { code: 'gas_key' };
+    if (!data || !Array.isArray(data.events)) throw { code: 'gas_access' };
+    gasCache = { events: data.events, updated: data.updated, via: 'link' }; gasFetchedAt = Date.now();
+    Local.setKV('agendaGas', gasCache);
+    return gasCache;
+  } catch (e) {
+    if (!force) gasFetchedAt = Date.now(); // don't retry on every lookup; the test button always retries
+    if (gasCache && !force) return gasCache;
+    throw e;
+  }
+}
+function importGasCode(raw) {
+  const m = /DECL1:([A-Za-z0-9+/=\s]+)/.exec(raw || '');
+  if (!m) throw { code: 'gas_code' };
+  let data;
+  try { data = JSON.parse(new TextDecoder().decode(b64(m[1].replace(/\s+/g, '')))); } catch { throw { code: 'gas_code' }; }
+  if (!data || !Array.isArray(data.events)) throw { code: 'gas_code' };
+  gasCache = { events: data.events, updated: data.updated, via: 'code' };
+  Local.setKV('agendaGas', gasCache);
+  return gasCache;
+}
+function agendaSummary(d) {
+  const codes = [...new Set(d.events.map(e => e.code))];
+  return [el('div', { text: `${d.events.length} afspraken met projectcode, bijgewerkt ${d.updated ? fmtLong(d.updated.slice(0, 10)) + ' ' + d.updated.slice(11, 16) : 'onbekend'}${d.via === 'code' ? ' (uit agenda-code; plak af en toe een nieuwe)' : ''}.` }),
+    codes.length ? el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px' }, codes.slice(0, 16).map(c => el('span', { class: 'chip code', text: c }))) : ''];
+}
 function calErrorText(e) {
   const c = e && e.code;
+  if (c === 'gas_none') return 'Plak in Instellingen → Werkagenda de agenda-link of agenda-code uit het script.';
+  if (c === 'gas_key') return 'De agenda-link klopt niet (sleutel onjuist). Kopieer hem opnieuw van de scriptpagina.';
+  if (c === 'gas_access') return 'De agenda-link vraagt om inloggen of is niet bereikbaar. Zet bij Implementeren de toegang op “Iedereen”, of gebruik de agenda-code.';
+  if (c === 'gas_net') return 'Agenda niet bereikbaar (geen internet?). Typ de code of kies een recent project.';
+  if (c === 'gas_code') return 'Dit is geen geldige agenda-code. Kopieer hem opnieuw van de scriptpagina (begint met DECL1:).';
   if (c === 'no_pass') return 'Vul in Instellingen → Werkagenda het agenda-wachtwoord in, of stel een app-wachtwoord in.';
   if (c === 'bad_pass') return 'Het agenda-wachtwoord klopt niet. Controleer het in Instellingen.';
   if (c === 'no_sync_file') return 'Er is nog geen agenda opgehaald. Het automatisch bijwerken is nog niet ingesteld of nog niet gedraaid.';
@@ -1447,8 +1506,8 @@ $('#sendWrap').addEventListener('click', e => { if (e.target === $('#sendWrap'))
 /* ================= settings ================= */
 function openSettings() {
   $('#sName').value = settings.name; $('#sEmail').value = settings.adminEmail; $('#sIban').value = settings.iban;
-  $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
-  renderCalSrc(); renderIcsInfo(); renderSecurity();
+  $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sGasUrl').value = settings.gasUrl || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
+  renderCalSrc(); renderIcsInfo(); renderGasInfo(); renderSecurity();
   $('#calResult').hidden = true;
   $('#storageInfo').textContent = mode === 'cloud'
     ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
@@ -1458,10 +1517,28 @@ function openSettings() {
 function renderCalSrc() {
   $('#calSrc [data-src=google]').hidden = !caps.mcp;
   $('#calSrc [data-src=sync]').hidden = !WEB;
+  $('#calSrc [data-src=gas]').hidden = !WEB;
+  $('#calGas').hidden = settings.calSource !== 'gas';
   for (const b of document.querySelectorAll('#calSrc .cat')) b.setAttribute('aria-pressed', b.dataset.src === settings.calSource ? 'true' : 'false');
   $('#calGoogle').hidden = settings.calSource !== 'google';
   $('#calSync').hidden = settings.calSource !== 'sync';
   $('#calIcs').hidden = settings.calSource !== 'ics';
+}
+$('#gasTest').onclick = async () => {
+  await persistSettings();
+  const out = $('#gasResult'); out.hidden = false; out.textContent = 'Agenda ophalen…';
+  try { out.replaceChildren(...agendaSummary(await gasAgenda(true))); }
+  catch (e) { out.textContent = calErrorText(e); }
+};
+$('#gasImport').onclick = () => {
+  const out = $('#gasResult'); out.hidden = false;
+  try { const d = importGasCode($('#sGasCode').value); $('#sGasCode').value = ''; out.replaceChildren(...agendaSummary(d)); toast('Agenda ingelezen'); }
+  catch (e) { out.textContent = calErrorText(e); }
+};
+async function renderGasInfo() {
+  const d = gasCache || await Local.getKV('agendaGas');
+  const out = $('#gasResult');
+  if (d) { out.hidden = false; out.replaceChildren(...agendaSummary(d)); } else out.hidden = true;
 }
 $('#syncTest').onclick = async () => {
   await persistSettings();
@@ -1479,11 +1556,12 @@ async function persistSettings() {
   settings.adminEmail = $('#sEmail').value.trim();
   settings.iban = $('#sIban').value.trim().toUpperCase();
   settings.calendarId = $('#sCalId').value.trim();
+  if ($('#sGasUrl').value.trim() !== settings.gasUrl) { settings.gasUrl = $('#sGasUrl').value.trim(); gasFetchedAt = 0; }
   if ($('#sSyncPass').value !== settings.syncPass) { settings.syncPass = $('#sSyncPass').value; syncFetched = false; syncCache = null; }
   settings.template = $('#sTpl').value.trim() ? $('#sTpl').value : DEFAULT_TEMPLATE;
   try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }
 }
-for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sSyncPass', '#sTpl']) $(id).addEventListener('change', persistSettings);
+for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sSyncPass', '#sGasUrl', '#sTpl']) $(id).addEventListener('change', persistSettings);
 $('#setDone').onclick = async () => { await persistSettings(); show('home'); renderHome(); renderSetupCard(); };
 $('#openSettings').onclick = openSettings;
 $('#setupGo').onclick = openSettings;
@@ -1643,7 +1721,8 @@ async function boot() {
     }
   }
   if (!caps.mcp && settings.calSource === 'google') settings.calSource = WEB ? 'ics' : 'none';
-  if (!WEB && settings.calSource === 'sync') settings.calSource = 'none';
+  if (!WEB && (settings.calSource === 'sync' || settings.calSource === 'gas')) settings.calSource = 'none';
+  if (WEB && settings.calSource === 'gas' && settings.gasUrl) gasAgenda(false).catch(() => {}); // refresh in the background
   if (WEB && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account' : (WEB ? 'Bewaard op deze telefoon' : 'Bewaard op dit apparaat');
   renderHome(); renderSetupCard();
