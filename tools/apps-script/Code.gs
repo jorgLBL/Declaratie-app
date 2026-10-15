@@ -14,6 +14,8 @@
 
 var DAYS_BACK = 400;   // zo ver terug kunnen bonnen gaan
 var DAYS_AHEAD = 120;
+var DAYS_BACK_SLOW = 90; // zonder de dienst "Google Calendar API" is elke afspraak een losse, trage aanvraag
+var CACHE_SECONDS = 600; // de app vraagt de agenda vaak op; 10 minuten hetzelfde antwoord is snel genoeg
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
@@ -58,11 +60,17 @@ function doPost(e) {
   }
 }
 
-/** Voer deze functie één keer uit in de editor om toegang tot je agenda te geven en de werking te testen. */
+/**
+ * Voer deze functie één keer uit in de editor: geeft toegang tot agenda en Gmail en test de werking.
+ * Het resultaat staat daarna in het uitvoeringslogboek.
+ */
 function test() {
-  var data = collect_();
-  Logger.log(data.events.length + ' afspraken met projectcode gevonden. Voorbeeld: ' + JSON.stringify(data.events.slice(0, 3)));
-  Logger.log('Gmail: ' + GmailApp.getDrafts().length + ' concepten. Mails worden klaargezet vanaf ' + Session.getEffectiveUser().getEmail() + '.');
+  var t0 = Date.now();
+  var data = collect_(true);
+  Logger.log(data.events.length + ' afspraken met projectcode gevonden in ' + Math.round((Date.now() - t0) / 1000) + ' s (' +
+    (data.via === 'api' ? 'snel, via Google Calendar API' : 'traag; voeg de dienst Google Calendar API toe, zie de handleiding') + ').');
+  Logger.log('Voorbeeld: ' + JSON.stringify(data.events.slice(0, 3)));
+  Logger.log('Gmail: concepten worden klaargezet vanaf ' + Session.getEffectiveUser().getEmail() + ' (adressen: ' + GmailApp.getAliases().concat([Session.getEffectiveUser().getEmail()]).join(', ') + ').');
 }
 
 function getKey_() {
@@ -84,30 +92,69 @@ function findCodes_(text) {
   return out;
 }
 
-function collect_() {
-  var cal = CalendarApp.getDefaultCalendar();
-  var tz = cal.getTimeZone() || Session.getScriptTimeZone();
+function collect_(fresh) {
+  var cache = CacheService.getScriptCache();
+  if (!fresh) {
+    var hit = cache.get('agenda');
+    if (hit) return JSON.parse(hit);
+  }
+  var tz = Session.getScriptTimeZone();
   var now = new Date();
-  var from = new Date(now.getTime() - DAYS_BACK * 864e5), to = new Date(now.getTime() + DAYS_AHEAD * 864e5);
   var fmt = function (d, f) { return Utilities.formatDate(d, tz, f); };
   var events = [];
-  cal.getEvents(from, to).forEach(function (ev) {
-    try { if (ev.getMyStatus && ev.getMyStatus() === CalendarApp.GuestStatus.NO) return; } catch (err) {}
-    var title = ev.getTitle() || '';
-    var codes = findCodes_([title, ev.getDescription(), ev.getLocation()].join(' '));
-    if (!codes.length) return;
-    var allDay = ev.isAllDayEvent();
-    var start = ev.getStartTime(), end = ev.getEndTime();
-    var last = new Date(Math.max(start.getTime(), end.getTime() - (allDay ? 864e5 : 60e3)));
-    var item = {
-      s: fmt(start, 'yyyy-MM-dd'),
-      e: fmt(last, 'yyyy-MM-dd'),
-      t: title.slice(0, 120),
-      time: allDay ? 'hele dag' : fmt(start, 'HH:mm') + '–' + fmt(end, 'HH:mm'),
-    };
-    codes.forEach(function (code) { events.push({ s: item.s, e: item.e, code: code, t: item.t, time: item.time }); });
-  });
-  return { updated: fmt(now, "yyyy-MM-dd'T'HH:mm"), tz: tz, account: Session.getEffectiveUser().getEmail(), events: events };
+  var add = function (codes, title, s, e, time) {
+    codes.forEach(function (code) { events.push({ s: s, e: e < s ? s : e, code: code, t: String(title || '').slice(0, 120), time: time }); });
+  };
+  var via;
+  if (typeof Calendar !== 'undefined' && Calendar.Events) {
+    // Google Calendar API (dienst toevoegen in de editor): alle afspraken in een paar aanvragen
+    via = 'api';
+    try { tz = Calendar.Calendars.get('primary').timeZone || tz; } catch (err) {}
+    var from = new Date(now.getTime() - DAYS_BACK * 864e5), to = new Date(now.getTime() + DAYS_AHEAD * 864e5);
+    var pageToken = null;
+    do {
+      var res = Calendar.Events.list('primary', {
+        timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true, maxResults: 2500, pageToken: pageToken,
+        fields: 'nextPageToken,items(summary,description,location,start,end,status,attendees(self,responseStatus))',
+      });
+      (res.items || []).forEach(function (it) {
+        if (it.status === 'cancelled') return;
+        var me = (it.attendees || []).filter(function (a) { return a.self; })[0];
+        if (me && me.responseStatus === 'declined') return;
+        var codes = findCodes_([it.summary, it.description, it.location].join(' '));
+        if (!codes.length || !it.start || !it.end) return;
+        if (it.start.date && !it.start.dateTime) {
+          var last = new Date(Date.UTC(+it.end.date.slice(0, 4), +it.end.date.slice(5, 7) - 1, +it.end.date.slice(8, 10) - 1));
+          add(codes, it.summary, it.start.date, Utilities.formatDate(last, 'UTC', 'yyyy-MM-dd'), 'hele dag');
+        } else {
+          var start = new Date(it.start.dateTime), end = new Date(it.end.dateTime);
+          add(codes, it.summary, fmt(start, 'yyyy-MM-dd'), fmt(new Date(Math.max(start.getTime(), end.getTime() - 60e3)), 'yyyy-MM-dd'), fmt(start, 'HH:mm') + '–' + fmt(end, 'HH:mm'));
+        }
+      });
+      pageToken = res.nextPageToken;
+    } while (pageToken);
+  } else {
+    // zonder die dienst: kortere periode, en per afspraak zo min mogelijk vragen
+    via = 'calendarapp';
+    var cal = CalendarApp.getDefaultCalendar();
+    tz = cal.getTimeZone() || tz;
+    var from2 = new Date(now.getTime() - DAYS_BACK_SLOW * 864e5), to2 = new Date(now.getTime() + DAYS_AHEAD * 864e5);
+    cal.getEvents(from2, to2).forEach(function (ev) {
+      var title = ev.getTitle() || '';
+      var codes = findCodes_(title);
+      if (!codes.length) codes = findCodes_([ev.getDescription(), ev.getLocation()].join(' '));
+      if (!codes.length) return;
+      try { if (ev.getMyStatus() === CalendarApp.GuestStatus.NO) return; } catch (err) {}
+      var allDay = ev.isAllDayEvent();
+      var start = ev.getStartTime(), end = ev.getEndTime();
+      var lastMoment = new Date(Math.max(start.getTime(), end.getTime() - (allDay ? 864e5 : 60e3)));
+      add(codes, title, fmt(start, 'yyyy-MM-dd'), fmt(lastMoment, 'yyyy-MM-dd'), allDay ? 'hele dag' : fmt(start, 'HH:mm') + '–' + fmt(end, 'HH:mm'));
+    });
+  }
+  var data = { updated: fmt(now, "yyyy-MM-dd'T'HH:mm"), tz: tz, via: via, account: Session.getEffectiveUser().getEmail(), events: events };
+  var json = JSON.stringify(data);
+  if (json.length < 95000) cache.put('agenda', json, CACHE_SECONDS);
+  return data;
 }
 
 function toIcs_(events) {
@@ -135,7 +182,7 @@ function json_(obj) {
 
 function setupPage_() {
   var link = ScriptApp.getService().getUrl() + '?key=' + getKey_();
-  var data = collect_();
+  var data = collect_(true);
   var code = 'DECL1:' + Utilities.base64Encode(JSON.stringify(data), Utilities.Charset.UTF_8);
   var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); };
   var html = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
