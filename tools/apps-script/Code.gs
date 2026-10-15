@@ -1,9 +1,9 @@
 /**
- * Declaratie-app: werkagenda doorgeven aan de app.
+ * Declaratie-app: declaraties klaarzetten in Gmail en de werkagenda doorgeven aan de app.
  *
  * Zet dit script in je WERK-Google-account (script.google.com). Het leest je agenda als jou
  * en geeft alleen afspraken door waarin een projectcode staat (4 letters + 4 cijfers).
- * Instellen: zie de handleiding (README) in het GitHub-project, kopje "Google-werkagenda".
+ * Instellen: zie de handleiding (README) in het GitHub-project, kopje "Google-werkaccount koppelen".
  *
  * - Met de geheime sleutel (?key=...) geeft het de afspraken als JSON (voor de app) of als
  *   .ics (?format=ics, voor het bijwerken via GitHub).
