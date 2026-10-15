@@ -410,7 +410,7 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
 
     <div class="group-title" id="gTitle" hidden>Google-werkaccount</div>
     <div class="group" id="gBox" hidden>
-      <div class="hint top">Koppel het script uit je werkaccount. Daarmee zet de app declaraties met bijlage klaar in je Gmail en leest hij je werkagenda. Eenmalig instellen: zie de handleiding in je GitHub-project, kopje “Google-werkaccount koppelen”.</div>
+      <div class="hint top">Koppel het script uit je werkaccount. Daarmee zet de app declaraties met bijlage klaar in je Gmail, leest hij je werkagenda en bewaart hij je bonnen in je Google Drive, zodat je ze ook op je computer ziet. Eenmalig instellen: zie de handleiding in je GitHub-project, kopje “Google-werkaccount koppelen”.</div>
       <div class="field"><label for="sGasUrl">Koppeling</label><input id="sGasUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/…"></div>
       <div class="small-btns" style="padding-top:12px"><button class="btn btn-soft" id="gasTest">Test koppeling</button></div>
       <div class="result" id="gasAcct" hidden></div>
@@ -475,7 +475,11 @@ input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40p
     <div class="group" id="secBox" hidden></div>
 
     <div class="group-title">Opslag</div>
-    <div class="group"><div class="hint top" id="storageInfo"></div></div>
+    <div class="group">
+      <div class="hint top" id="storageInfo"></div>
+      <div class="small-btns" id="cloudBtns" hidden><button class="btn btn-soft" id="cloudNow">Nu bijwerken</button></div>
+      <div class="result" id="cloudResult" hidden></div>
+    </div>
   </div>
 </section>
 
@@ -657,6 +661,7 @@ const Local = {
       tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
     });
   },
+  async get(id) { try { return (await this.req('recs', 'readonly', s => s.get(id))) || null; } catch { return this.mem.recs.get(id) || null; } },
   async all() { try { return await this.req('recs', 'readonly', s => s.getAll()) || []; } catch { return [...this.mem.recs.values()]; } },
   async put(rec) { this.mem.recs.set(rec.id, rec); try { await this.req('recs', 'readwrite', s => s.put(rec)); } catch {} },
   async del(id) { this.mem.recs.delete(id); try { await this.req('recs', 'readwrite', s => s.delete(id)); } catch {} },
@@ -679,15 +684,19 @@ const Store = {
     return Local.all();
   },
   async put(rec) {
+    if (mode === 'local' && WEB) rec.updated = Math.max(Date.now(), (rec.updated || 0) + 1);
     const clean = JSON.parse(JSON.stringify(rec));
     if (mode === 'cloud') await Cloud.db.doc(`${Cloud.base}/recs/${rec.id}`).set(clean);
-    else await Local.put(clean);
+    else { await Local.put(clean); if (WEB) await Sync.mark(rec.id, { u: rec.updated }); }
   },
   async del(rec) {
     if (mode === 'cloud') {
       await Cloud.db.doc(`${Cloud.base}/recs/${rec.id}`).delete();
       if (rec.photo?.asset && Cloud.assets) Cloud.assets.delete(rec.photo.asset).catch(() => {});
-    } else await Local.del(rec.id);
+    } else {
+      await Local.del(rec.id);
+      if (WEB) await Sync.mark(rec.id, { u: Math.max(Date.now(), (rec.updated || 0) + 1), d: true });
+    }
     Local.delBlob(rec.id);
   },
   async getSettings() {
@@ -711,6 +720,7 @@ const Store = {
   },
   async savePhoto(rec, blob) {
     await Local.putBlob(rec.id, blob);
+    rec.photoAt = Date.now(); // a new photo version, to be sent to Drive
     if (mode === 'cloud' && Cloud.assets) {
       try { const up = await Cloud.assets.upload(blob, {}); rec.photo = { asset: up.id }; return; }
       catch (e) { console.warn('upload', e); }
@@ -722,7 +732,7 @@ const Store = {
 const urlCache = new Map();
 async function photoURL(rec) {
   if (urlCache.has(rec.id)) return urlCache.get(rec.id);
-  const b = await Local.getBlob(rec.id);
+  const b = await Local.getBlob(rec.id) || await Sync.photo(rec);
   let u = null;
   if (b) u = URL.createObjectURL(b);
   else if (rec.photo?.asset) u = '/_blob/' + rec.photo.asset;
@@ -731,7 +741,7 @@ async function photoURL(rec) {
 }
 async function photoBlob(rec) {
   if (draftBlob && editing && editing.id === rec.id) return draftBlob;
-  const b = await Local.getBlob(rec.id); if (b) return b;
+  const b = await Local.getBlob(rec.id) || await Sync.photo(rec); if (b) return b;
   if (!rec.photo?.asset) return null;
   const src = '/_blob/' + rec.photo.asset;
   try { const r = await fetch(src); if (r.ok) { const blob = await r.blob(); Local.putBlob(rec.id, blob); return blob; } } catch {}
@@ -740,6 +750,136 @@ async function photoBlob(rec) {
     c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
     return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
   } catch { return null; }
+}
+
+/* ================= online bewaren ================= */
+// Web app with a Google link: bonnen and photos also live in the user's Google Drive (via the script),
+// so every device that opens the app with the same link sees the same bonnen. Newest change wins.
+const blobToB64 = async b => (await blobToDataURL(b)).split(',')[1];
+const Sync = {
+  busy: null, again: false, timer: null, lastRun: 0, state: null, photoQ: new Map(), photoActive: 0, photoWait: [],
+  on() { return WEB && mode === 'local' && !!settings.gasUrl; },
+  async mark(id, entry) {
+    const p = (await Local.getKV('syncPending')) || {};
+    p[id] = entry; await Local.setKV('syncPending', p);
+    this.soon();
+  },
+  async call(url, body) {
+    let res;
+    try { res = await fetch(url, { method: 'POST', body: JSON.stringify(body), credentials: 'omit' }); }
+    catch { throw { code: 'net' }; }
+    let r; try { r = await res.json(); } catch { throw { code: 'reply' }; }
+    if (!r.ok) throw { code: r.error || 'reply', message: r.message };
+    return r;
+  },
+  soon(ms = 1500) { if (!this.on()) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), ms); },
+  run() {
+    if (!this.on()) return Promise.resolve();
+    if (this.busy) { this.again = true; return this.busy; }
+    this.busy = this.work().catch(e => { this.state = { error: e }; renderCloud(); })
+      .finally(() => { this.busy = null; this.lastRun = Date.now(); if (this.again) { this.again = false; this.soon(200); } });
+    return this.busy;
+  },
+  // one round: send changes, take in what other devices changed, then upload new photos
+  async work() {
+    const url = settings.gasUrl;
+    let meta = await Local.getKV('syncMeta');
+    if (!meta || meta.url !== url) meta = { url, since: 0, first: true };
+    await this.exchange(url, meta);
+    let uploaded = 0;
+    for (const r of await Local.all()) {
+      const ver = r.photoAt || 1;
+      if (r.drivePhoto === ver) continue;
+      const blob = await Local.getBlob(r.id); if (!blob) continue;
+      await this.call(url, { action: 'photo', id: r.id, type: blob.type || 'image/jpeg', data: await blobToB64(blob) });
+      const fresh = await Local.get(r.id); if (!fresh || (fresh.photoAt || 1) !== ver) continue;
+      fresh.drivePhoto = ver; fresh.updated = Math.max(Date.now(), (fresh.updated || 0) + 1);
+      await Local.put(fresh);
+      const p = (await Local.getKV('syncPending')) || {}; p[r.id] = { u: fresh.updated }; await Local.setKV('syncPending', p);
+      const i = recs.findIndex(x => x.id === r.id); if (i >= 0) recs[i] = { ...recs[i], drivePhoto: ver, updated: fresh.updated };
+      uploaded++;
+    }
+    if (uploaded) await this.exchange(url, meta);
+    this.state = { ok: true, at: Date.now(), total: meta.total };
+    renderCloud();
+  },
+  async exchange(url, meta) {
+    const pending = (await Local.getKV('syncPending')) || {};
+    const ids = new Set(Object.keys(pending));
+    if (meta.first) for (const r of await Local.all()) ids.add(r.id);
+    const send = [];
+    for (const id of ids) {
+      const r = await Local.get(id);
+      if (r) send.push({ ...r, updated: r.updated || r.created || 1 });
+      else if (pending[id] && pending[id].d) send.push({ id, deleted: true, updated: pending[id].u });
+    }
+    const res = await this.call(url, { action: 'sync', since: meta.first ? 0 : meta.since, recs: send });
+    let changed = false;
+    for (const s of res.recs || []) {
+      const { srv, ...rec } = s;
+      const l = await Local.get(rec.id);
+      const p = ((await Local.getKV('syncPending')) || {})[rec.id];
+      const mine = l ? (l.updated || l.created || 0) : (p && p.d ? p.u : 0);
+      if (mine >= (rec.updated || 0)) continue;
+      if (rec.deleted) {
+        if (l) { await Local.del(rec.id); await Local.delBlob(rec.id); urlCache.delete(rec.id); changed = true; }
+        continue;
+      }
+      if (l && (l.photoAt || 1) !== (rec.photoAt || 1)) { await Local.delBlob(rec.id); urlCache.delete(rec.id); }
+      await Local.put(rec); changed = true;
+    }
+    const after = (await Local.getKV('syncPending')) || {};
+    for (const r of send) if (after[r.id] && after[r.id].u === r.updated) delete after[r.id];
+    await Local.setKV('syncPending', after);
+    meta.since = res.now; meta.first = false; meta.total = res.total;
+    await Local.setKV('syncMeta', meta);
+    if (changed) {
+      recs = await Local.all();
+      if ($('#editor').hidden && $('#sendWrap').hidden) renderHome();
+    }
+  },
+  // a photo taken on another device: fetch it once from Drive (two at a time)
+  photo(rec) {
+    if (!this.on() || !rec.drivePhoto || rec.drivePhoto !== (rec.photoAt || 1)) return Promise.resolve(null);
+    if (this.photoQ.has(rec.id)) return this.photoQ.get(rec.id);
+    const p = (async () => {
+      if (this.photoActive >= 2) await new Promise(r => this.photoWait.push(r));
+      this.photoActive++;
+      try {
+        const r = await this.call(settings.gasUrl, { action: 'photoGet', id: rec.id });
+        const blob = new Blob([b64(r.data)], { type: r.type || 'image/jpeg' });
+        await Local.putBlob(rec.id, blob);
+        return blob;
+      } catch { return null; }
+      finally { this.photoActive--; this.photoWait.shift()?.(); this.photoQ.delete(rec.id); }
+    })();
+    this.photoQ.set(rec.id, p);
+    return p;
+  },
+};
+const CLOUD_ERRORS = {
+  net: 'Geen verbinding met het script. De app probeert het later opnieuw; je bonnen blijven op dit apparaat.',
+  reply: 'Het script gaf geen antwoord. Voer in het script de functie test uit en sta Drive toe.',
+  request: 'Het script kent online bewaren nog niet. Zet de nieuwste versie van het script in je werkaccount en maak een nieuwe versie van de implementatie.',
+  key: 'De Google-koppeling klopt niet (sleutel onjuist). Kopieer de link opnieuw van de scriptpagina.',
+};
+function renderCloud() {
+  const on = Sync.on(), st = Sync.state;
+  $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account'
+    : on && st && st.ok ? 'Bewaard in je Google Drive' : (WEB ? 'Bewaard op deze telefoon' : 'Bewaard op dit apparaat');
+  $('#storageInfo').textContent = mode === 'cloud'
+    ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
+    : on
+      ? 'Bonnen en foto’s staan op dit apparaat én in je Google Drive (map Declaratie-app). Open de app op je computer met dezelfde koppeling, dan zie je daar dezelfde bonnen.'
+      : WEB
+        ? 'Bonnen en foto’s worden alleen op dit apparaat bewaard. Met de Google-koppeling hierboven staan ze ook in je Google Drive en zie je ze op iPhone en computer.'
+        : 'Bonnen en foto’s worden alleen op dit apparaat bewaard.';
+  $('#cloudBtns').hidden = !on;
+  const out = $('#cloudResult');
+  out.hidden = !on || !st;
+  if (!on || !st) return;
+  if (st.ok) out.textContent = `${st.total} ${st.total === 1 ? 'bon' : 'bonnen'} online · bijgewerkt om ${new Date(st.at).toTimeString().slice(0, 5)}`;
+  else out.textContent = CLOUD_ERRORS[st.error && st.error.code] || ('Google Drive weigerde' + (st.error && st.error.message ? ': ' + st.error.message : '') + '. Voer in het script de functie test uit en sta Drive toe.');
 }
 
 /* ================= state ================= */
@@ -1506,8 +1646,8 @@ async function sendViaGmail() {
     let res;
     try { res = await fetch(settings.gasUrl, { method: 'POST', body: JSON.stringify(payload), credentials: 'omit' }); }
     catch { throw { msg: navigator.onLine ? 'Het script is niet bereikbaar of vraagt om inloggen. Controleer of de nieuwste versie is geïmplementeerd met toegang “Iedereen”.' : 'Geen internet. Probeer het opnieuw als je verbinding hebt.' }; }
-    let r; try { r = await res.json(); } catch { throw { msg: 'Het script gaf geen antwoord. Heeft het al toestemming voor Gmail? Zie de handleiding: “Gmail toestaan”.' }; }
-    if (!r.ok) throw { msg: GMAIL_ERRORS[r.error] || ('Gmail weigerde het concept' + (r.message ? ': ' + r.message : '') + '. Zie de handleiding: “Gmail toestaan”.') };
+    let r; try { r = await res.json(); } catch { throw { msg: 'Het script gaf geen antwoord. Voer in het script de functie test uit en sta Gmail toe.' }; }
+    if (!r.ok) throw { msg: GMAIL_ERRORS[r.error] || ('Gmail weigerde het concept' + (r.message ? ': ' + r.message : '') + '. Voer in het script de functie test uit en sta Gmail toe.') };
     if (r.account && r.account !== settings.gasAccount) { settings.gasAccount = r.account; persistSettings(); renderSteps(); }
     if (to !== settings.adminEmail) { settings.adminEmail = to; persistSettings(); }
     $('#gmailDoneText').replaceChildren(el('b', { text: 'De e-mail staat klaar in Gmail' }), `${r.account ? ' van ' + r.account : ''}, bij Concepten. Open hem, controleer en verstuur.`);
@@ -1574,9 +1714,7 @@ function openSettings() {
   $('#sCalId').value = settings.calendarId; $('#sSyncPass').value = settings.syncPass || ''; $('#sGasUrl').value = settings.gasUrl || ''; $('#sTpl').value = settings.template || DEFAULT_TEMPLATE;
   renderCalSrc(); renderIcsInfo(); renderGasInfo(); renderSecurity(); renderVia(); $('#gasAcct').hidden = true;
   $('#calResult').hidden = true;
-  $('#storageInfo').textContent = mode === 'cloud'
-    ? 'Bonnen en foto’s worden bewaard in je Claude-account, bij deze app. Ze zijn zichtbaar op elk apparaat waarop je de app opent.'
-    : 'Bonnen en foto’s worden alleen op deze telefoon bewaard, in deze app. Verwijder je de app van je beginscherm, dan zijn ze weg; de verstuurde mails blijven je bewijs.';
+  renderCloud();
   show('settings');
 }
 function renderCalSrc() {
@@ -1589,6 +1727,10 @@ function renderCalSrc() {
   $('#calSync').hidden = settings.calSource !== 'sync';
   $('#calIcs').hidden = settings.calSource !== 'ics';
 }
+$('#cloudNow').onclick = async () => {
+  const out = $('#cloudResult'); out.hidden = false; out.textContent = 'Bijwerken…';
+  await Sync.run();
+};
 $('#gasTest').onclick = async () => {
   await persistSettings();
   const out = $('#gasAcct'); out.hidden = false; out.textContent = 'Koppeling testen…';
@@ -1632,14 +1774,17 @@ $('#syncTest').onclick = async () => {
 };
 for (const b of document.querySelectorAll('#calSrc .cat')) b.onclick = () => { settings.calSource = b.dataset.src; renderCalSrc(); persistSettings(); };
 async function persistSettings() {
+  if (!$('#settings').hidden) readSettingsForm(); // elsewhere the form is not filled in, so it must not overwrite anything
+  try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }
+}
+function readSettingsForm() {
   settings.name = $('#sName').value.trim();
   settings.adminEmail = $('#sEmail').value.trim();
   settings.iban = $('#sIban').value.trim().toUpperCase();
   settings.calendarId = $('#sCalId').value.trim();
-  if ($('#sGasUrl').value.trim() !== settings.gasUrl) { settings.gasUrl = $('#sGasUrl').value.trim(); settings.gasAccount = ''; gasFetchedAt = 0; renderVia(); }
+  if ($('#sGasUrl').value.trim() !== settings.gasUrl) { settings.gasUrl = $('#sGasUrl').value.trim(); settings.gasAccount = ''; gasFetchedAt = 0; Sync.state = null; renderVia(); renderCloud(); Sync.soon(300); }
   if ($('#sSyncPass').value !== settings.syncPass) { settings.syncPass = $('#sSyncPass').value; syncFetched = false; syncCache = null; }
   settings.template = $('#sTpl').value.trim() ? $('#sTpl').value : DEFAULT_TEMPLATE;
-  try { await Store.saveSettings(settings); } catch { toast('Instellingen opslaan lukte niet.'); }
 }
 for (const id of ['#sName', '#sEmail', '#sIban', '#sCalId', '#sSyncPass', '#sGasUrl', '#sTpl']) $(id).addEventListener('change', persistSettings);
 $('#setDone').onclick = async () => { await persistSettings(); show('home'); renderHome(); renderSetupCard(); };
@@ -1804,8 +1949,14 @@ async function boot() {
   if (!WEB && (settings.calSource === 'sync' || settings.calSource === 'gas')) settings.calSource = 'none';
   if (WEB && settings.calSource === 'gas' && settings.gasUrl) gasAgenda(false).catch(() => {}); // refresh in the background
   if (WEB && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  $('#storageNote').textContent = mode === 'cloud' ? 'Bewaard in je Claude-account' : (WEB ? 'Bewaard op deze telefoon' : 'Bewaard op dit apparaat');
+  renderCloud();
   renderHome(); renderSetupCard();
+  if (WEB) {
+    Sync.run();
+    // pick up changes from the other device when the app comes back to the front
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - Sync.lastRun > 15000) Sync.run(); });
+    addEventListener('online', () => Sync.run());
+  }
 }
 boot();
 })();

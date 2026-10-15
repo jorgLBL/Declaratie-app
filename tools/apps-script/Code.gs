@@ -9,6 +9,8 @@
  *   .ics (?format=ics, voor het bijwerken via GitHub).
  * - Met de sleutel zet het ook een declaratie-mail met bijlage klaar als concept in je Gmail
  *   (alleen een concept: versturen doe je zelf in Gmail).
+ * - Met de sleutel bewaart het je bonnen en foto's in de map "Declaratie-app" in je Google Drive,
+ *   zodat iPhone en computer dezelfde bonnen zien.
  * - Zonder sleutel toont het alleen aan jou een pagina met je app-link en een agenda-code.
  */
 
@@ -40,6 +42,13 @@ function doPost(e) {
   if (p.key !== getKey_()) return json_({ error: 'key' });
   var req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ error: 'request' }); }
+  if (req.action === 'sync' || req.action === 'photo' || req.action === 'photoGet') {
+    try {
+      return json_(req.action === 'sync' ? sync_(req) : req.action === 'photo' ? photoPut_(req) : photoGet_(req));
+    } catch (err) {
+      return json_({ error: 'drive', message: String(err && err.message || err) });
+    }
+  }
   if (req.action !== 'draft') return json_({ error: 'request' });
   var to = String(req.to || '').trim();
   if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(to)) return json_({ error: 'to' });
@@ -61,7 +70,7 @@ function doPost(e) {
 }
 
 /**
- * Voer deze functie één keer uit in de editor: geeft toegang tot agenda en Gmail en test de werking.
+ * Voer deze functie één keer uit in de editor: geeft toegang tot agenda, Gmail en Drive en test de werking.
  * Het resultaat staat daarna in het uitvoeringslogboek.
  */
 function test() {
@@ -71,6 +80,96 @@ function test() {
     (data.via === 'api' ? 'snel, via Google Calendar API' : 'traag; voeg de dienst Google Calendar API toe, zie de handleiding') + ').');
   Logger.log('Voorbeeld: ' + JSON.stringify(data.events.slice(0, 3)));
   Logger.log('Gmail: concepten worden klaargezet vanaf ' + Session.getEffectiveUser().getEmail() + ' (adressen: ' + GmailApp.getAliases().concat([Session.getEffectiveUser().getEmail()]).join(', ') + ').');
+  var idx = readIndex_(indexFile_(folder_()));
+  Logger.log('Drive: bonnen worden bewaard in de map "' + FOLDER_NAME + '" (' + liveCount_(idx) + ' bonnen).');
+}
+
+/* ---------- bonnen online bewaren (map in Google Drive) ---------- */
+// bonnen.json bevat alle bonnen; elke foto is een los bestand bon-<id>.jpg. Een verwijderde bon blijft
+// als {id, deleted} staan, zodat andere apparaten hem ook weghalen. Bij twee wijzigingen wint de nieuwste.
+var FOLDER_NAME = 'Declaratie-app';
+var MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+function folder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('FOLDER');
+  if (id) {
+    try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (err) {}
+  }
+  var made = DriveApp.createFolder(FOLDER_NAME);
+  props.setProperty('FOLDER', made.getId());
+  return made;
+}
+
+function indexFile_(folder) {
+  var it = folder.getFilesByName('bonnen.json');
+  return it.hasNext() ? it.next() : folder.createFile('bonnen.json', '{"seq":0,"recs":{}}', MimeType.PLAIN_TEXT);
+}
+
+function readIndex_(file) {
+  var idx = {};
+  try { idx = JSON.parse(file.getBlob().getDataAsString('UTF-8')) || {}; } catch (err) {}
+  idx.seq = idx.seq || 0;
+  idx.recs = idx.recs || {};
+  return idx;
+}
+
+function liveCount_(idx) {
+  return Object.keys(idx.recs).filter(function (k) { return !idx.recs[k].deleted; }).length;
+}
+
+function validId_(id) { return typeof id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(id); }
+
+function photoName_(id) { return 'bon-' + id + '.jpg'; }
+
+function trashPhoto_(folder, id) {
+  var it = folder.getFilesByName(photoName_(id));
+  while (it.hasNext()) it.next().setTrashed(true);
+}
+
+// Ontvangt de wijzigingen van een apparaat en geeft alles terug wat sinds `since` is veranderd.
+function sync_(req) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var folder = folder_();
+    var file = indexFile_(folder);
+    var idx = readIndex_(file);
+    var incoming = (req.recs || []).slice(0, 2000), changed = false;
+    incoming.forEach(function (r) {
+      if (!r || !validId_(r.id) || JSON.stringify(r).length > 20000) return;
+      var cur = idx.recs[r.id];
+      if (cur && (cur.updated || 0) >= (r.updated || 0)) return;
+      if (!changed) { idx.seq++; changed = true; }
+      r.srv = idx.seq;
+      idx.recs[r.id] = r;
+      if (r.deleted) trashPhoto_(folder, r.id);
+    });
+    if (changed) file.setContent(JSON.stringify(idx));
+    var since = +req.since || 0;
+    var out = Object.keys(idx.recs).map(function (k) { return idx.recs[k]; }).filter(function (r) { return (r.srv || 0) > since; });
+    return { ok: true, now: idx.seq, recs: out, total: liveCount_(idx) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function photoPut_(req) {
+  if (!validId_(req.id)) return { error: 'request' };
+  var bytes = Utilities.base64Decode(String(req.data || ''));
+  if (!bytes.length || bytes.length > MAX_PHOTO_BYTES) return { error: 'size' };
+  var folder = folder_();
+  trashPhoto_(folder, req.id);
+  folder.createFile(Utilities.newBlob(bytes, String(req.type || 'image/jpeg'), photoName_(req.id)));
+  return { ok: true };
+}
+
+function photoGet_(req) {
+  if (!validId_(req.id)) return { error: 'request' };
+  var it = folder_().getFilesByName(photoName_(req.id));
+  if (!it.hasNext()) return { error: 'nophoto' };
+  var blob = it.next().getBlob();
+  return { ok: true, type: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
 }
 
 function getKey_() {
@@ -193,7 +292,7 @@ function setupPage_() {
     '.ok{color:#0F7F57;font-weight:600;min-height:1.4em}</style>' +
     '<h1>Werkagenda voor de Declaratie-app</h1>' +
     '<p>' + data.events.length + ' afspraken met projectcode gevonden (' + new Set(data.events.map(function (e) { return e.code; })).size + ' projecten).</p>' +
-    '<h2>1. Koppeling (aanbevolen)</h2><p>Kopieer deze link en plak hem in de app bij Instellingen → Google-werkaccount → Koppeling. Daarmee zet de app mails klaar in Gmail en leest hij je agenda. Deel hem met niemand.</p>' +
+    '<h2>1. Koppeling (aanbevolen)</h2><p>Kopieer deze link en plak hem in de app bij Instellingen → Google-werkaccount → Koppeling. Daarmee zet de app mails klaar in Gmail, leest hij je agenda en bewaart hij je bonnen in je Google Drive. Gebruik dezelfde link op je iPhone en je computer. Deel hem met niemand.</p>' +
     '<textarea id="l" rows="4" readonly>' + esc(link) + '</textarea><button onclick="cp(\'l\')">Kopieer link</button>' +
     '<h2>2. Werkt de link niet?</h2><p>Kopieer dan voor je agenda deze agenda-code en plak hem in de app bij Werkagenda → Google (werk) → agenda-code. Herhaal dit af en toe om je agenda bij te werken.</p>' +
     '<textarea id="c" rows="4" readonly>' + esc(code) + '</textarea><button onclick="cp(\'c\')">Kopieer agenda-code</button>' +

@@ -30,6 +30,7 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   const url = `http://localhost:${server.address().port}/`;
   // stand-in for script.google.com: the real Code.gs behind it, on another origin (as in reality)
   const gas = require('./gas-harness.cjs').run('');
+  let gasImpl = gas, gasOld = false; // gasOld: an older script without online storage
   const gasPosts = [];
   const gasServer = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
@@ -37,10 +38,14 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
     const reply = r => { res.writeHead(200, { 'content-type': r.mime === 'json' ? 'application/json' : 'text/plain', 'access-control-allow-origin': '*' }); res.end(r.text); };
     if (req.method === 'POST') {
       let body = ''; req.on('data', c => { body += c; });
-      req.on('end', () => { gasPosts.push(req.headers['content-type']); reply(gas.ctx.doPost({ parameter: Object.fromEntries(u.searchParams), postData: { contents: body } })); });
+      req.on('end', () => {
+        gasPosts.push(req.headers['content-type']);
+        if (gasOld && JSON.parse(body).action !== 'draft') return reply({ mime: 'json', text: '{"error":"request"}' });
+        reply(gasImpl.ctx.doPost({ parameter: Object.fromEntries(u.searchParams), postData: { contents: body } }));
+      });
       return;
     }
-    reply(gas.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) }));
+    reply(gasImpl.ctx.doGet({ parameter: Object.fromEntries(u.searchParams) }));
   }).listen(0);
   const gasBase = `http://127.0.0.1:${gasServer.address().port}/exec`;
   gas.ctx.doGet({ parameter: { key: 'x' } }); // creates the key
@@ -240,6 +245,92 @@ const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', json: '
   await p2.click('#openSettings');
   ok((await p2.$eval('#secBox', e => e.textContent)).includes('APP_PASSWORD'), 'instellingen leggen uit hoe je een wachtwoord instelt');
   await ctx2.close();
+
+  console.log('Online bewaren: iPhone en computer');
+  gasImpl = require('./gas-harness.cjs').run('');
+  gasImpl.ctx.doGet({ parameter: { key: 'x' } });
+  const link = gasBase + '?key=' + gasImpl.props.KEY;
+  const drive = gasImpl.out.drive;
+  const index = () => { const f = drive.files.find(x => x.name === 'bonnen.json'); return f ? JSON.parse(Buffer.from(f.bytes).toString()).recs : {}; };
+  const live = () => Object.values(index()).filter(r => !r.deleted);
+  const until = async (fn, what, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn()) return true; await new Promise(r => setTimeout(r, 200)); } console.log('    wachten op: ' + what); return false; };
+  const connect = async pg => {
+    await pg.click('#openSettings');
+    await pg.fill('#sGasUrl', link); await pg.dispatchEvent('#sGasUrl', 'change');
+    await pg.click('#setDone');
+  };
+  const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'nl-NL', timezoneId: 'Europe/Amsterdam' });
+  const phone = await phoneCtx.newPage();
+  phone.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
+  await phone.goto(url); await phone.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  await connect(phone);
+  await phone.setInputFiles('#libInput', path.join(here, 'photo-lunch.jpg'));
+  await phone.waitForSelector('#editor:not([hidden])');
+  await phone.waitForFunction(() => !document.querySelector('#edStatus .spin'), null, { timeout: 90000 });
+  await phone.click('#edSave'); await phone.waitForSelector('#editor', { state: 'hidden' });
+  ok(await until(() => live().length === 1 && drive.files.some(f => /^bon-.*\.jpg$/.test(f.name) && !f.trashed) && live()[0].drivePhoto, 'bon en foto in Drive'), 'iPhone: nieuwe bon met foto staat in Drive');
+  await phone.waitForFunction(() => /Google Drive/.test(document.querySelector('#storageNote').textContent));
+  ok(true, 'iPhone meldt "Bewaard in je Google Drive"');
+
+  const pcCtx = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'nl-NL', timezoneId: 'Europe/Amsterdam' });
+  const pc = await pcCtx.newPage();
+  pc.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
+  await pc.goto(url); await pc.waitForFunction(() => /telefoon/.test(document.querySelector('#storageNote').textContent));
+  ok((await pc.$$('#list .row')).length === 0, 'computer begint leeg');
+  await connect(pc);
+  await pc.waitForFunction(() => document.querySelectorAll('#list .row').length === 1, null, { timeout: 15000 }).catch(() => {});
+  ok((await pc.$$('#list .row')).length === 1 && (await pc.$eval('#list .row .t', e => e.textContent)) === 'Lunch', 'computer: bon van de iPhone verschijnt na koppelen');
+  await pc.waitForFunction(() => { const i = document.querySelector('#list .row .thumb img'); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 15000 }).catch(() => {});
+  ok(await pc.$eval('#list .row .thumb', t => { const i = t.querySelector('img'); return !!(i && i.naturalWidth > 0); }), 'computer: foto komt uit Drive');
+  await pc.screenshot({ path: path.join(out, 'web-computer.png') });
+
+  await pc.click('#list .row'); await pc.waitForSelector('#editor:not([hidden])');
+  await pc.fill('#inDesc', 'Lunch met klant'); await pc.fill('#inProject', 'KLMN2041'); await pc.dispatchEvent('#inProject', 'input');
+  await pc.click('#edSave'); await pc.waitForSelector('#editor', { state: 'hidden' });
+  ok(await until(() => live()[0] && live()[0].description === 'Lunch met klant', 'wijziging computer in Drive'), 'computer: wijziging gaat naar Drive');
+  await phone.reload(); await phone.waitForFunction(() => document.querySelector('#list .row .t')?.textContent === 'Lunch met klant', null, { timeout: 15000 }).catch(() => {});
+  ok((await phone.$eval('#list .row .t', e => e.textContent)) === 'Lunch met klant' && (await phone.$eval('#list .row .chip', e => e.textContent)) === 'KLMN2041', 'iPhone: ziet de wijziging van de computer');
+
+  await phoneCtx.setOffline(true);
+  await phone.click('#list .row'); await phone.waitForSelector('#editor:not([hidden])');
+  await phone.fill('#inAmount', '24,75'); await phone.click('#edSave'); await phone.waitForSelector('#editor', { state: 'hidden' });
+  ok((await phone.$eval('#list .row .amt', e => e.textContent)).includes('24,75') && live()[0].amount === 23.5, 'iPhone zonder internet: wijziging bewaard op de telefoon');
+  await phoneCtx.setOffline(false);
+  await phone.evaluate(() => dispatchEvent(new Event('online')));
+  ok(await until(() => live()[0] && live()[0].amount === 24.75, 'wijziging na online'), 'weer online: wijziging gaat alsnog naar Drive');
+
+  await phone.click('#list .row'); await phone.waitForSelector('#editor:not([hidden])');
+  await phone.click('#edDeclare'); await phone.waitForSelector('#sendWrap:not([hidden])');
+  await phone.waitForFunction(() => !document.querySelector('#sendShare').disabled, null, { timeout: 15000 });
+  await phone.fill('#mTo', 'administratie@bedrijf.nl');
+  await phone.click('#sendShare'); await phone.waitForSelector('#sendDone:not([hidden])', { timeout: 10000 });
+  await phone.click('#sendMark');
+  ok(await until(() => live()[0] && live()[0].status === 'sent', 'verstuurd in Drive'), 'iPhone: verstuurd gemarkeerd, ook in Drive');
+  await phone.click('#openSettings');
+  ok(await phone.$eval('#sGasUrl', e => e.value) === link && await phone.$eval('#sEmail', e => e.value) === 'administratie@bedrijf.nl', 'versturen na herstart wist geen instellingen (koppeling blijft staan)');
+  await phone.click('#setDone');
+  await pc.reload(); await pc.click('#tabSent');
+  await pc.waitForFunction(() => document.querySelectorAll('#list .row').length === 1, null, { timeout: 15000 }).catch(() => {});
+  ok((await pc.$$('#list .row')).length === 1, 'computer: bon staat bij Verstuurd');
+
+  await pc.click('#list .row'); await pc.waitForSelector('#editor:not([hidden])');
+  await pc.click('#edDelete'); await pc.click('#edDeleteYes');
+  ok(await until(() => live().length === 0 && !drive.files.some(f => /^bon-/.test(f.name) && !f.trashed), 'verwijderd in Drive'), 'computer: verwijderen haalt bon en foto uit Drive');
+  await phone.reload(); await phone.click('#tabSent');
+  await phone.waitForFunction(() => document.querySelectorAll('#list .row').length === 0, null, { timeout: 15000 }).catch(() => {});
+  ok((await phone.$$('#list .row')).length === 0, 'iPhone: verwijderde bon is ook daar weg');
+
+  gasOld = true;
+  await pc.click('#openSettings'); await pc.click('#cloudNow');
+  await pc.waitForFunction(() => !/Bijwerken…/.test(document.querySelector('#cloudResult').textContent), null, { timeout: 10000 });
+  ok((await pc.$eval('#cloudResult', e => e.textContent)).includes('nieuwste versie van het script'), 'oud script: duidelijke melding om bij te werken');
+  gasOld = false;
+  await pc.click('#cloudNow');
+  await pc.waitForFunction(() => /online · bijgewerkt/.test(document.querySelector('#cloudResult').textContent), null, { timeout: 10000 }).catch(() => {});
+  ok((await pc.$eval('#cloudResult', e => e.textContent)).startsWith('0 bonnen online'), 'instellingen tonen stand van online bewaren');
+  await pc.$eval('#cloudResult', e => e.scrollIntoView({ block: 'center' }));
+  await pc.screenshot({ path: path.join(out, 'web-cloud-settings.png') });
+  await phoneCtx.close(); await pcCtx.close();
   fs.rmSync(path.join(site, 'agenda.enc'), { force: true });
   console.log('\nFouten in console: ' + (errors.length ? '\n' + errors.join('\n') : 'geen'));
   console.log(`\n${pass} geslaagd, ${fail} mislukt`);
